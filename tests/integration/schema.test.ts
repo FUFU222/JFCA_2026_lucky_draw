@@ -14,6 +14,7 @@ type EntryInput = {
 
 let supabase: SupabaseClient;
 const testCampaignIds: string[] = [];
+const testRateLimitKeys: string[] = [];
 
 function uniqueSlug() {
   return `schema-test-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -96,15 +97,40 @@ describeWithSupabase('lucky draw schema', () => {
   });
 
   afterEach(async () => {
-    if (testCampaignIds.length === 0) {
-      return;
+    const campaignIds = testCampaignIds.splice(0, testCampaignIds.length);
+    const rateLimitKeys = testRateLimitKeys.splice(0, testRateLimitKeys.length);
+    const cleanupErrors: Error[] = [];
+
+    if (campaignIds.length > 0) {
+      const { error: entriesError } = await supabase
+        .from('raffle_entries')
+        .delete()
+        .in('campaign_id', campaignIds);
+
+      if (entriesError) {
+        cleanupErrors.push(new Error(`${entriesError.code}: ${entriesError.message}`));
+      }
+
+      const { error: campaignsError } = await supabase.from('campaigns').delete().in('id', campaignIds);
+
+      if (campaignsError) {
+        cleanupErrors.push(new Error(`${campaignsError.code}: ${campaignsError.message}`));
+      }
     }
 
-    const { error } = await supabase.from('campaigns').delete().in('id', testCampaignIds);
-    testCampaignIds.splice(0, testCampaignIds.length);
+    if (rateLimitKeys.length > 0) {
+      const { error: rateLimitError } = await supabase
+        .from('rate_limit_buckets')
+        .delete()
+        .in('bucket_key', rateLimitKeys);
 
-    if (error) {
-      throw new Error(`${error.code}: ${error.message}`);
+      if (rateLimitError) {
+        cleanupErrors.push(new Error(`${rateLimitError.code}: ${rateLimitError.message}`));
+      }
+    }
+
+    if (cleanupErrors.length > 0) {
+      throw new AggregateError(cleanupErrors, 'Schema integration test cleanup failed');
     }
   });
 
@@ -146,6 +172,7 @@ describeWithSupabase('lucky draw schema', () => {
 
   it('atomically allows only the configured rate-limit threshold', async () => {
     const key = `ip:${uniqueSlug()}`;
+    testRateLimitKeys.push(key);
     const results = await Promise.all(
       Array.from({ length: 4 }, () =>
         callRpc<boolean>('consume_raffle_rate_limit', {
