@@ -7,8 +7,10 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  // English is the default public language. Task 6 makes this follow the
+  // locale the visitor selects.
   return (
-    <html lang="ja">
+    <html lang="en">
       <body>{children}</body>
     </html>
   );

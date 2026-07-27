@@ -32,7 +32,7 @@ async function createCampaign() {
       status: 'DRAFT',
       terms_version: 'test-v1',
     })
-    .select('id')
+    .select('id, slug')
     .single();
 
   if (error || !data) {
@@ -40,7 +40,7 @@ async function createCampaign() {
   }
 
   testCampaignIds.push(data.id);
-  return data;
+  return data as { id: string; slug: string };
 }
 
 async function createEntry({ campaignId, email, number }: EntryInput) {
@@ -267,12 +267,14 @@ describeWithSupabase('lucky draw schema', () => {
     const receiptTokenHash = `receipt-${uniqueSlug()}`;
 
     const firstNumber = await callRpc<number>('confirm_raffle_verification', {
-      token_hash: tokenHash,
-      receipt_token_hash: receiptTokenHash,
+      p_token_hash: tokenHash,
+      p_receipt_token_hash: receiptTokenHash,
+      p_event_slug: campaign.slug,
     });
     const repeatedNumber = await callRpc<number>('confirm_raffle_verification', {
-      token_hash: tokenHash,
-      receipt_token_hash: receiptTokenHash,
+      p_token_hash: tokenHash,
+      p_receipt_token_hash: receiptTokenHash,
+      p_event_slug: campaign.slug,
     });
 
     expect(firstNumber).toBe(10_000);
@@ -390,12 +392,14 @@ describeWithSupabase('lucky draw schema', () => {
     );
 
     const expiredError = await rpcError('confirm_raffle_verification', {
-      token_hash: tokenHash,
-      receipt_token_hash: `receipt-${uniqueSlug()}`,
+      p_token_hash: tokenHash,
+      p_receipt_token_hash: `receipt-${uniqueSlug()}`,
+      p_event_slug: campaign.slug,
     });
     const missingError = await rpcError('confirm_raffle_verification', {
-      token_hash: `absent-${uniqueSlug()}`,
-      receipt_token_hash: `receipt-${uniqueSlug()}`,
+      p_token_hash: `absent-${uniqueSlug()}`,
+      p_receipt_token_hash: `receipt-${uniqueSlug()}`,
+      p_event_slug: campaign.slug,
     });
 
     expect(expiredError?.code).toBe('RD001');
@@ -411,12 +415,30 @@ describeWithSupabase('lucky draw schema', () => {
     );
 
     await callRpc<number>('confirm_raffle_verification', {
-      token_hash: tokenHash,
-      receipt_token_hash: `receipt-${uniqueSlug()}`,
+      p_token_hash: tokenHash,
+      p_receipt_token_hash: `receipt-${uniqueSlug()}`,
+      p_event_slug: campaign.slug,
     });
+    // The link that issued the number is now consumed, so presenting it with a
+    // different derived receipt reads as an unusable link, not a rotation.
+    const staleError = await rpcError('confirm_raffle_verification', {
+      p_token_hash: tokenHash,
+      p_receipt_token_hash: `receipt-${uniqueSlug()}`,
+      p_event_slug: campaign.slug,
+    });
+
+    expect(staleError?.code).toBe('RD001');
+
+    // A live, unconsumed link whose derived receipt differs from the stored one
+    // can only mean the receipt secret changed.
+    const liveToken = await createVerificationToken(
+      entry.id,
+      new Date(Date.now() + 60_000).toISOString(),
+    );
     const rotatedError = await rpcError('confirm_raffle_verification', {
-      token_hash: tokenHash,
-      receipt_token_hash: `receipt-${uniqueSlug()}`,
+      p_token_hash: liveToken,
+      p_receipt_token_hash: `receipt-${uniqueSlug()}`,
+      p_event_slug: campaign.slug,
     });
 
     expect(rotatedError?.code).toBe('RD002');
@@ -432,8 +454,9 @@ describeWithSupabase('lucky draw schema', () => {
 
     await expect(
       callRpc<number>('confirm_raffle_verification', {
-        token_hash: tokenHash,
-        receipt_token_hash: `receipt-${uniqueSlug()}`,
+        p_token_hash: tokenHash,
+        p_receipt_token_hash: `receipt-${uniqueSlug()}`,
+        p_event_slug: campaign.slug,
       }),
     ).rejects.toThrow('Verification token has expired');
 

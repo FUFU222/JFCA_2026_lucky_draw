@@ -11,7 +11,16 @@ const ACCEPTED = {
   message: 'If eligible, check your email for a verification link.',
 } as const;
 
+/**
+ * The per-IP limit is only as trustworthy as the header it reads. `x-real-ip`
+ * is a single value written by the edge proxy and is preferred; the first
+ * `x-forwarded-for` entry is the fallback and is trustworthy only because the
+ * platform overwrites that header on ingress. Confirm this against the
+ * deployment platform before launch.
+ */
 export function clientIpAddress(request: Request): string | undefined {
+  const realIp = request.headers.get('x-real-ip')?.trim();
+  if (realIp) return realIp;
   return request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || undefined;
 }
 

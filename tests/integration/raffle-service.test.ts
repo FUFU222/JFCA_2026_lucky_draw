@@ -42,7 +42,7 @@ class MemoryRepository implements RaffleRepository {
   readonly entries: RaffleEntry[] = [];
   readonly tokens: VerificationToken[] = [];
   readonly deliveries: DeliveryRecord[] = [];
-  readonly completedJobs: Array<{ jobId: string; sent: boolean; error?: string }> = [];
+  readonly completedJobs: Array<{ jobId: string; lease: string; sent: boolean; error?: string }> = [];
   receiptJobAvailable = true;
   confirmFailure: Error | null = null;
   private assignedNumber: bigint | null = null;
@@ -108,7 +108,14 @@ class MemoryRepository implements RaffleRepository {
     this.deliveries.push(input);
   }
 
-  async confirmVerification(tokenHash: string): Promise<ConfirmedVerification | null> {
+  async confirmVerification(
+    tokenHash: string,
+    _receiptTokenHash: string,
+    eventSlug: string,
+  ): Promise<ConfirmedVerification | null> {
+    if (eventSlug !== this.campaign.slug) {
+      throw new RaffleLinkError('Verification link belongs to another event');
+    }
     if (this.confirmFailure) throw this.confirmFailure;
     const token = this.tokens.find((candidate) => candidate.tokenHash === tokenHash);
     if (!token) throw new RaffleLinkError('Verification token was not found');
@@ -138,11 +145,17 @@ class MemoryRepository implements RaffleRepository {
     this.receiptJobAvailable = false;
     const entry = this.entries.find((candidate) => candidate.id === entryId);
     if (!entry || entry.number === null) return null;
-    return { id: 'receipt-job-1', entryId, email: entry.email, number: BigInt(entry.number) };
+    return {
+      id: 'receipt-job-1',
+      entryId,
+      email: entry.email,
+      number: BigInt(entry.number),
+      leaseExpiresAt: new Date(this.clock().getTime() + 5 * 60 * 1000).toISOString(),
+    };
   }
 
-  async completeReceiptJob(jobId: string, result: { sent: boolean; error?: string }) {
-    this.completedJobs.push({ jobId, ...result });
+  async completeReceiptJob(job: ReceiptJob, result: { sent: boolean; error?: string }) {
+    this.completedJobs.push({ jobId: job.id, lease: job.leaseExpiresAt, ...result });
   }
 }
 
@@ -412,7 +425,7 @@ describe('RaffleService confirmation', () => {
 
     expect(mailer.receipts).toHaveLength(1);
     expect(mailer.receipts[0].number).toBe(BigInt(10_000));
-    expect(repository.completedJobs).toEqual([{ jobId: 'receipt-job-1', sent: true }]);
+    expect(repository.completedJobs).toMatchObject([{ jobId: 'receipt-job-1', sent: true }]);
   });
 
   it('keeps the number valid and the job retryable when the receipt cannot be sent', async () => {
@@ -431,9 +444,10 @@ describe('RaffleService confirmation', () => {
       entryId: 'entry-1',
       kind: 'RECEIPT',
       status: 'FAILED',
+      providerMessageId: null,
       providerError: 'resend unavailable',
     });
-    expect(repository.completedJobs).toEqual([
+    expect(repository.completedJobs).toMatchObject([
       { jobId: 'receipt-job-1', sent: false, error: 'resend unavailable' },
     ]);
   });

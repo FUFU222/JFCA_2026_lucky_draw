@@ -1,6 +1,12 @@
 const SITEVERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
 
 /**
+ * Registration waits on this call, so a stalled Cloudflare must fail the
+ * request quickly instead of holding a serverless invocation open.
+ */
+const VERIFY_TIMEOUT_MS = 5_000;
+
+/**
  * Cloudflare's published non-production secrets. They always return a fixed
  * verdict, so production must refuse to start a verification with any of them
  * rather than silently accepting every visitor.
@@ -33,6 +39,7 @@ export class TurnstileVerifier {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body,
+        signal: AbortSignal.timeout(VERIFY_TIMEOUT_MS),
       });
       return response.ok && ((await response.json()) as { success?: boolean }).success === true;
     } catch {

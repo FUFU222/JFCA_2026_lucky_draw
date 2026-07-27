@@ -293,7 +293,7 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
     expect(tokens?.[0].send_count).toBe(1);
   });
 
-  it('rejects a link that belongs to another campaign', async () => {
+  it('rejects a link posted to another event without consuming it', async () => {
     const campaign = await createOpenCampaign();
     const other = await createOpenCampaign();
     const mailer = new FakeMailer();
@@ -306,10 +306,120 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
       termsConsent: true,
       turnstileToken: 'captcha',
     });
+    const token = mailer.verification[0].token;
 
     await expect(
-      service.confirmVerification({ eventSlug: other.slug, token: mailer.verification[0].token }),
+      service.confirmVerification({ eventSlug: other.slug, token }),
     ).resolves.toBeNull();
+
+    // The refusal must happen before anything is written, or the visitor is
+    // told the link is broken while their number has already been issued.
+    const entry = await entryId(campaign.id);
+    const { data: after } = await supabase
+      .from('raffle_entries')
+      .select('state, number')
+      .eq('id', entry ?? '')
+      .single();
+    expect(after).toMatchObject({ state: 'PENDING', number: null });
+    const { data: campaignAfter } = await supabase
+      .from('campaigns')
+      .select('next_number')
+      .eq('id', campaign.id)
+      .single();
+    expect(campaignAfter?.next_number).toBe(10_000);
+
+    // The link still works for its own event afterwards.
+    await expect(
+      service.confirmVerification({ eventSlug: campaign.slug, token }),
+    ).resolves.toMatchObject({ number: BigInt(10_000) });
+  });
+
+  it('refuses to issue a number once the draw has started', async () => {
+    const campaign = await createOpenCampaign();
+    const mailer = new FakeMailer();
+    const service = buildService(mailer);
+
+    await service.requestVerification({
+      eventSlug: campaign.slug,
+      email: `late-${uniqueSuffix()}@example.com`,
+      locale: 'en',
+      termsConsent: true,
+      turnstileToken: 'captcha',
+    });
+
+    await supabase
+      .from('campaigns')
+      .update({ draw_starts_at: new Date(Date.now() - 1_000).toISOString() })
+      .eq('id', campaign.id);
+
+    await expect(
+      service.confirmVerification({
+        eventSlug: campaign.slug,
+        token: mailer.verification[0].token,
+      }),
+    ).resolves.toBeNull();
+  });
+
+  it('answers a stale link from an earlier cycle as unusable, not as a server fault', async () => {
+    const campaign = await createOpenCampaign();
+    const mailer = new FakeMailer();
+    const service = buildService(mailer);
+    const email = `stale-${uniqueSuffix()}@example.com`;
+    const request = {
+      eventSlug: campaign.slug,
+      email,
+      locale: 'en' as const,
+      termsConsent: true as const,
+      turnstileToken: 'captcha',
+    };
+
+    await service.requestVerification(request);
+    const firstToken = mailer.verification[0].token;
+
+    // Expire the first token and let a second submission issue a new link.
+    const entry = await entryId(campaign.id);
+    await supabase
+      .from('verification_tokens')
+      .update({ expires_at: new Date(Date.now() - 1_000).toISOString() })
+      .eq('entry_id', entry ?? '');
+    await service.requestVerification(request);
+    const secondToken = mailer.verification[1].token;
+    expect(secondToken).not.toBe(firstToken);
+
+    await expect(
+      service.confirmVerification({ eventSlug: campaign.slug, token: secondToken }),
+    ).resolves.toMatchObject({ number: BigInt(10_000) });
+
+    // Clicking the older email must not raise a receipt-mismatch fault.
+    await expect(
+      service.confirmVerification({ eventSlug: campaign.slug, token: firstToken }),
+    ).resolves.toBeNull();
+  });
+
+  it('lets one of two concurrent first submissions win without failing the other', async () => {
+    const campaign = await createOpenCampaign();
+    const mailer = new FakeMailer();
+    const service = buildService(mailer);
+    const request = {
+      eventSlug: campaign.slug,
+      email: `race-${uniqueSuffix()}@example.com`,
+      locale: 'en' as const,
+      termsConsent: true as const,
+      turnstileToken: 'captcha',
+    };
+
+    const results = await Promise.all([
+      service.requestVerification(request),
+      service.requestVerification(request),
+    ]);
+
+    expect(results).toEqual([{ accepted: true }, { accepted: true }]);
+
+    const { data: entries } = await supabase
+      .from('raffle_entries')
+      .select('id')
+      .eq('campaign_id', campaign.id);
+    expect(entries).toHaveLength(1);
   });
 
   it('reports an unknown link as unusable rather than as a server fault', async () => {

@@ -51,6 +51,8 @@ export interface ReceiptJob {
   entryId: string;
   email: string;
   number: bigint;
+  /** Fences completion so an expired lease cannot overwrite a newer attempt. */
+  leaseExpiresAt: string;
 }
 
 export interface ConfirmedVerification {
@@ -89,9 +91,10 @@ export interface RaffleRepository {
   confirmVerification(
     tokenHash: string,
     receiptTokenHash: string,
+    eventSlug: string,
   ): Promise<ConfirmedVerification | null>;
   claimReceiptJob(entryId: string): Promise<ReceiptJob | null>;
-  completeReceiptJob(jobId: string, result: { sent: boolean; error?: string }): Promise<void>;
+  completeReceiptJob(job: ReceiptJob, result: { sent: boolean; error?: string }): Promise<void>;
 }
 
 export interface RaffleMailer {
@@ -258,6 +261,7 @@ export class RaffleService {
       confirmed = await this.dependencies.repository.confirmVerification(
         hashToken(request.token),
         hashToken(receiptToken),
+        request.eventSlug,
       );
     } catch (error) {
       // Only a database verdict that the link is unusable becomes a user-facing
@@ -266,8 +270,8 @@ export class RaffleService {
       throw error;
     }
 
-    // A token belonging to another campaign must not confirm through this
-    // event's URL, even though the entry itself is legitimate.
+    // The event slug was already enforced inside the transaction; this only
+    // guards against an adapter returning an unrelated row.
     if (!confirmed || confirmed.campaignSlug !== request.eventSlug) return null;
 
     const number = BigInt(confirmed.number);
@@ -280,19 +284,21 @@ export class RaffleService {
     email: string,
     ipAddress: string | undefined,
   ): Promise<boolean> {
-    const [emailAllowed, ipAllowed] = await Promise.all([
-      this.dependencies.rateLimiter.consume(
-        `raffle:email:${hashToken(`${eventSlug}:${email}`)}`,
-        EMAIL_REQUEST_LIMIT,
-        RATE_LIMIT_WINDOW_SECONDS,
-      ),
-      this.dependencies.rateLimiter.consume(
-        `raffle:ip:${hashToken(`${eventSlug}:${ipAddress ?? 'unknown'}`)}`,
-        IP_REQUEST_LIMIT,
-        RATE_LIMIT_WINDOW_SECONDS,
-      ),
-    ]);
-    return emailAllowed && ipAllowed;
+    // The address limit is consumed first and the checks are sequential: an
+    // address that is already over its limit must not be able to keep creating
+    // per-address buckets, and a blocked caller must not burn a shared bucket.
+    const ipAllowed = await this.dependencies.rateLimiter.consume(
+      `raffle:ip:${hashToken(`${eventSlug}:${ipAddress ?? 'unknown'}`)}`,
+      IP_REQUEST_LIMIT,
+      RATE_LIMIT_WINDOW_SECONDS,
+    );
+    if (!ipAllowed) return false;
+
+    return this.dependencies.rateLimiter.consume(
+      `raffle:email:${hashToken(`${eventSlug}:${email}`)}`,
+      EMAIL_REQUEST_LIMIT,
+      RATE_LIMIT_WINDOW_SECONDS,
+    );
   }
 
   private hasExpired(token: VerificationToken): boolean {
@@ -368,6 +374,13 @@ export class RaffleService {
     try {
       const job = await this.dependencies.repository.claimReceiptJob(entryId);
       if (!job) return;
+
+      // Only the provider call is treated as a delivery failure. If the send
+      // succeeded and the bookkeeping afterwards throws, the error propagates
+      // to the outer handler and the job stays leased until it expires, rather
+      // than being recorded as a failure the visitor never experienced.
+      let deliveryError: string | null = null;
+      let providerMessageId: string | null = null;
       try {
         const result = await this.dependencies.mailer.sendReceipt({
           eventSlug: campaignSlug,
@@ -376,26 +389,22 @@ export class RaffleService {
           receiptToken,
           locale,
         });
-        await this.dependencies.repository.recordDelivery({
-          entryId,
-          kind: 'RECEIPT',
-          status: 'SENT',
-          providerMessageId: result.id ?? null,
-        });
-        await this.dependencies.repository.completeReceiptJob(job.id, { sent: true });
+        providerMessageId = result.id ?? null;
       } catch (error) {
-        const message = messageOf(error);
-        await this.dependencies.repository.recordDelivery({
-          entryId,
-          kind: 'RECEIPT',
-          status: 'FAILED',
-          providerError: message,
-        });
-        await this.dependencies.repository.completeReceiptJob(job.id, {
-          sent: false,
-          error: message,
-        });
+        deliveryError = messageOf(error);
       }
+
+      await this.dependencies.repository.recordDelivery({
+        entryId,
+        kind: 'RECEIPT',
+        status: deliveryError === null ? 'SENT' : 'FAILED',
+        providerMessageId,
+        providerError: deliveryError,
+      });
+      await this.dependencies.repository.completeReceiptJob(
+        job,
+        deliveryError === null ? { sent: true } : { sent: false, error: deliveryError },
+      );
     } catch (error) {
       this.dependencies.onDeliveryError?.(error);
     }

@@ -24,7 +24,8 @@ type DatabaseClient = SupabaseClient<any>;
 
 /** SQLSTATE raised by `confirm_raffle_verification` for an unusable link. */
 const UNUSABLE_LINK_SQLSTATE = 'RD001';
-const RETRY_BACKOFF_MS = 5 * 60 * 1000;
+const UNIQUE_VIOLATION_SQLSTATE = '23505';
+const RETRY_BACKOFF_SECONDS = 5 * 60;
 
 export function createServiceRoleClient(): DatabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -78,8 +79,15 @@ export class SupabaseRaffleRepository implements RaffleRepository {
       .insert({ ...input, state: 'PENDING' })
       .select()
       .single();
-    if (error) throw error;
-    return data as RaffleEntry;
+    if (!error) return data as RaffleEntry;
+
+    // Two concurrent submissions of the same address both see no entry and both
+    // insert. The unique index settles it; the loser reads the winner's row
+    // instead of failing a request that did nothing wrong.
+    if ((error as { code?: string }).code !== UNIQUE_VIOLATION_SQLSTATE) throw error;
+    const existing = await this.findEntryByEmail(input.campaign_id, input.email);
+    if (!existing) throw error;
+    return existing;
   }
 
   async updatePendingEntry(
@@ -157,10 +165,12 @@ export class SupabaseRaffleRepository implements RaffleRepository {
   async confirmVerification(
     tokenHash: string,
     receiptTokenHash: string,
+    eventSlug: string,
   ): Promise<ConfirmedVerification | null> {
     const { data, error } = await this.client.rpc('confirm_raffle_verification', {
-      token_hash: tokenHash,
-      receipt_token_hash: receiptTokenHash,
+      p_token_hash: tokenHash,
+      p_receipt_token_hash: receiptTokenHash,
+      p_event_slug: eventSlug,
     });
     if (error) {
       if ((error as { code?: string }).code === UNUSABLE_LINK_SQLSTATE) {
@@ -196,7 +206,7 @@ export class SupabaseRaffleRepository implements RaffleRepository {
       p_kind: 'RECEIPT',
     });
     if (error) throw error;
-    const claimed = (data as Array<{ id: string }> | null)?.[0];
+    const claimed = (data as Array<{ id: string; lease_expires_at: string }> | null)?.[0];
     if (!claimed) return null;
 
     const { data: entry, error: entryError } = await this.client
@@ -207,31 +217,25 @@ export class SupabaseRaffleRepository implements RaffleRepository {
     if (entryError) throw entryError;
     if (!entry || entry.number === null) return null;
 
-    return { id: claimed.id, entryId, email: entry.email, number: BigInt(entry.number) };
+    return {
+      id: claimed.id,
+      entryId,
+      email: entry.email,
+      number: BigInt(entry.number),
+      leaseExpiresAt: claimed.lease_expires_at,
+    };
   }
 
-  async completeReceiptJob(jobId: string, result: { sent: boolean; error?: string }): Promise<void> {
-    const now = Date.now();
-    const { error } = await this.client
-      .from('email_outbox')
-      .update(
-        result.sent
-          ? {
-              status: 'SENT',
-              sent_at: new Date(now).toISOString(),
-              leased_at: null,
-              lease_expires_at: null,
-              last_error: null,
-            }
-          : {
-              status: 'FAILED',
-              available_at: new Date(now + RETRY_BACKOFF_MS).toISOString(),
-              leased_at: null,
-              lease_expires_at: null,
-              last_error: result.error ?? 'delivery failed',
-            },
-      )
-      .eq('id', jobId);
+  async completeReceiptJob(job: ReceiptJob, result: { sent: boolean; error?: string }): Promise<void> {
+    // Fenced by the lease this worker holds, so a worker whose lease already
+    // expired cannot overwrite the outcome recorded by its replacement.
+    const { error } = await this.client.rpc('complete_email_outbox_job', {
+      p_job_id: job.id,
+      p_lease_expires_at: job.leaseExpiresAt,
+      p_sent: result.sent,
+      p_error: result.error ?? null,
+      p_retry_seconds: RETRY_BACKOFF_SECONDS,
+    });
     if (error) throw error;
   }
 }

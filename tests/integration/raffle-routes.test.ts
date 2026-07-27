@@ -86,6 +86,22 @@ describe('entry route', () => {
     expect(await response.json()).toEqual({ ok: false, error });
   });
 
+  it('prefers the single-value proxy address over the forwarded chain', async () => {
+    service.requestVerification.mockResolvedValue({ accepted: true });
+
+    await entry(
+      post('/api/campaigns/jfca-2026/entries', validEntryBody, {
+        'x-real-ip': '198.51.100.7',
+        'x-forwarded-for': '203.0.113.1, 70.41.3.18',
+      }),
+      { params },
+    );
+
+    expect(service.requestVerification).toHaveBeenCalledWith(
+      expect.objectContaining({ ipAddress: '198.51.100.7' }),
+    );
+  });
+
   it('rejects a body that is not a JSON object without calling the service', async () => {
     for (const body of ['not json', '"a string"', '[1,2,3]']) {
       const response = await entry(post('/api/campaigns/jfca-2026/entries', body), { params });
