@@ -1,6 +1,6 @@
 .DS_Store
 .gstack/
-.worktrees/
+.worktrees
 node_modules/
 .next/
 .env
