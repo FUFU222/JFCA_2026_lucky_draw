@@ -2,6 +2,11 @@
   "name": "jfca2026-lucky-draw",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@11.9.0",
+  "engines": {
+    "node": "22.x",
+    "pnpm": "11.9.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -10,31 +15,31 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test --pass-with-no-tests"
+    "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@react-email/components": "^1.0.12",
+    "react-email": "^6.9.1",
     "@supabase/ssr": "^0.12.3",
     "@supabase/supabase-js": "^2.110.8",
-    "next": "latest",
-    "react": "latest",
-    "react-dom": "latest",
+    "next": "16.2.12",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
     "resend": "^6.18.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^7.0.0",
     "@testing-library/react": "^16.3.2",
-    "@types/node": "latest",
-    "@types/react": "latest",
-    "@types/react-dom": "latest",
+    "@types/node": "^22.20.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.4",
-    "eslint": "^9.39.0",
-    "eslint-config-next": "latest",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "16.2.12",
     "jsdom": "^29.1.1",
     "playwright": "^1.62.0",
     "supabase": "^2.109.1",
-    "tailwindcss": "latest",
+    "tailwindcss": "4.3.3",
     "typescript": "^5.9.3",
     "vitest": "^4.1.10"
   }

@@ -1,9 +1,9 @@
 import { defineConfig, devices } from 'playwright/test';
 
 export default defineConfig({
-  testDir: './tests/e2e',
+  testDir: './e2e',
   use: {
-    baseURL: 'http://127.0.0.1:3000',
+    baseURL: 'http://localhost:3001',
     trace: 'on-first-retry',
   },
   projects: [
@@ -12,4 +12,10 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
   ],
+  webServer: {
+    command: 'pnpm exec next dev --port 3001',
+    url: 'http://localhost:3001',
+    reuseExistingServer: false,
+    timeout: 120_000,
+  },
 });
