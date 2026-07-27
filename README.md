@@ -40,10 +40,12 @@ no direct database access and never receive that key.
 
 Before deploying the application, run the following as the project owner in the
 Supabase SQL Editor (or apply the checked-in migration and
-`supabase/seed.sql` through the normal deployment pipeline). It creates or
-resets only the initial campaign. The two timestamps are intentionally `NULL`;
-an operator must set UTC instants later and explicitly change the campaign to
-`SCHEDULED` before public registration can open.
+`supabase/seed.sql` through the normal deployment pipeline). It creates the
+initial campaign only; if that slug already exists, it leaves the existing
+schedule, status, number counter, and terms version untouched. The initial
+timestamps are intentionally `NULL`; an operator must set UTC instants later
+and explicitly change the campaign to `SCHEDULED` before public registration
+can open.
 
 ```sql
 insert into public.campaigns (
@@ -58,14 +60,7 @@ values (
   10000,
   'jfca-2026-terms-v1-placeholder'
 )
-on conflict (slug) do update
-set
-  title = excluded.title,
-  opens_at = null,
-  draw_starts_at = null,
-  status = 'DRAFT',
-  next_number = 10000,
-  terms_version = excluded.terms_version;
+on conflict (slug) do nothing;
 ```
 
 ### End-to-end tests

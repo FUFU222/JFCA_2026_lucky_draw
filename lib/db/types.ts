@@ -10,7 +10,7 @@ export interface Campaign {
   opens_at: string | null;
   draw_starts_at: string | null;
   status: CampaignStatus;
-  next_number: bigint;
+  next_number: number;
   terms_version: string;
   created_at: string;
   updated_at: string;
@@ -29,7 +29,7 @@ export interface RaffleEntry {
   terms_version: string;
   terms_consented_at: string;
   state: EntryState;
-  number: bigint | null;
+  number: number | null;
   verified_at: string | null;
   receipt_token_hash: string | null;
   created_at: string;

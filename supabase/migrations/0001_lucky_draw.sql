@@ -17,7 +17,7 @@ create table public.campaigns (
 create table public.raffle_entries (
   id uuid primary key default gen_random_uuid(),
   campaign_id uuid not null references public.campaigns(id),
-  email text not null check (length(btrim(email)) > 0),
+  email text not null check (email = btrim(email) and length(email) > 0),
   first_name text,
   last_name text,
   phone text,
@@ -41,8 +41,8 @@ create table public.raffle_entries (
   )
 );
 
--- Email is normalized at the application boundary; this index still enforces
--- case-insensitive uniqueness if a caller bypasses that normalization.
+-- Email is normalized at the application boundary; the check rejects values
+-- with leading/trailing whitespace and this index enforces case-insensitivity.
 create unique index raffle_entries_campaign_lower_email_key
   on public.raffle_entries (campaign_id, lower(email));
 
@@ -304,6 +304,7 @@ begin
   select job.id into job_id
   from public.email_outbox as job
   where (job.status = 'PENDING' and job.available_at <= clock_timestamp())
+    or (job.status = 'FAILED' and job.available_at <= clock_timestamp())
     or (job.status = 'PROCESSING' and job.lease_expires_at <= clock_timestamp())
   order by job.available_at, job.created_at
   for update skip locked

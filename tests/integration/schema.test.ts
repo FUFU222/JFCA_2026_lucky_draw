@@ -170,6 +170,17 @@ describeWithSupabase('lucky draw schema', () => {
       .rejects.toThrow();
   });
 
+  it('rejects an email with leading or trailing whitespace', async () => {
+    const campaign = await createCampaign();
+
+    await expect(createEntry({ campaignId: campaign.id, email: 'user@example.com' }))
+      .resolves.toBeDefined();
+    await expect(createEntry({ campaignId: campaign.id, email: 'user@example.com ' }))
+      .rejects.toThrow();
+    await expect(createEntry({ campaignId: campaign.id, email: ' user@example.com' }))
+      .rejects.toThrow();
+  });
+
   it('atomically allows only the configured rate-limit threshold', async () => {
     const key = `ip:${uniqueSlug()}`;
     testRateLimitKeys.push(key);
@@ -280,5 +291,45 @@ describeWithSupabase('lucky draw schema', () => {
     expect(leasedJobError).toBeNull();
     expect(leasedJob).toMatchObject({ status: 'PROCESSING', attempt_count: 1 });
     expect(new Date(leasedJob?.lease_expires_at ?? '').getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it('reclaims an available failed outbox job', async () => {
+    const campaign = await createCampaign();
+    const entry = await createEntry({ campaignId: campaign.id, email: 'retry@example.com' });
+    const { data: job, error } = await supabase
+      .from('email_outbox')
+      .insert({
+        entry_id: entry.id,
+        kind: 'VERIFICATION',
+        status: 'FAILED',
+        available_at: new Date(Date.now() - 1_000).toISOString(),
+      })
+      .select('id')
+      .single();
+
+    if (error || !job) {
+      throw new Error(error?.message ?? 'Failed outbox job was not created');
+    }
+
+    type ClaimedJob = {
+      id: string;
+      attempt_count: number;
+      lease_expires_at: string;
+    };
+    const claimedJobs = await callRpc<ClaimedJob[]>('claim_email_outbox_job');
+
+    expect(claimedJobs).toHaveLength(1);
+    expect(claimedJobs[0]).toMatchObject({ id: job.id, attempt_count: 1 });
+    expect(new Date(claimedJobs[0].lease_expires_at).getTime()).toBeGreaterThan(Date.now());
+
+    const { data: reclaimedJob, error: reclaimedJobError } = await supabase
+      .from('email_outbox')
+      .select('status, attempt_count, lease_expires_at')
+      .eq('id', job.id)
+      .single();
+
+    expect(reclaimedJobError).toBeNull();
+    expect(reclaimedJob).toMatchObject({ status: 'PROCESSING', attempt_count: 1 });
+    expect(new Date(reclaimedJob?.lease_expires_at ?? '').getTime()).toBeGreaterThan(Date.now());
   });
 });
