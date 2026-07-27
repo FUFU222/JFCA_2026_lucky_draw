@@ -1,8 +1,24 @@
-.DS_Store
+# dependencies
+/node_modules
+
+# testing
+/coverage
+/playwright-report
+/test-results
+
+# next.js
+/.next/
+/out/
+
+# environment files
+.env*
+!.env.example
+
+# local tooling and OS files
 .gstack/
-.worktrees
-node_modules/
-.next/
-.env
-.env.local
-.env.test.local
+.DS_Store
+.worktrees/
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
