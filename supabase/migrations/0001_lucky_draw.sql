@@ -114,9 +114,13 @@ create index email_deliveries_entry_attempted_at_idx
 create table public.rate_limit_buckets (
   bucket_key text primary key,
   window_started_at timestamptz not null,
+  window_seconds integer not null check (window_seconds > 0),
   request_count integer not null check (request_count >= 0),
   updated_at timestamptz not null default now()
 );
+
+create index rate_limit_buckets_window_started_at_idx
+  on public.rate_limit_buckets (window_started_at);
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -165,24 +169,51 @@ begin
   insert into public.rate_limit_buckets as bucket (
     bucket_key,
     window_started_at,
+    window_seconds,
     request_count
   )
-  values (key, clock_timestamp(), 1)
+  values (key, clock_timestamp(), $3, 1)
   on conflict (bucket_key) do update
   set
+    window_seconds = greatest(bucket.window_seconds, $3),
     window_started_at = case
-      when bucket.window_started_at + make_interval(secs => window_seconds) <= clock_timestamp()
+      when bucket.window_started_at + make_interval(secs => $3) <= clock_timestamp()
         then clock_timestamp()
       else bucket.window_started_at
     end,
     request_count = case
-      when bucket.window_started_at + make_interval(secs => window_seconds) <= clock_timestamp()
+      when bucket.window_started_at + make_interval(secs => $3) <= clock_timestamp()
         then 1
       else bucket.request_count + 1
     end
-  where bucket.window_started_at + make_interval(secs => window_seconds) <= clock_timestamp()
+  where bucket.window_started_at + make_interval(secs => $3) <= clock_timestamp()
     or bucket.request_count < limit
   returning true into allowed;
+
+  -- Preserve the largest window ever requested for a key even when this call
+  -- was rejected at its threshold, so cleanup cannot discard it too early.
+  update public.rate_limit_buckets as bucket
+  set window_seconds = $3
+  where bucket.bucket_key = $1
+    and bucket.window_seconds < $3;
+
+  -- Bound storage without exposing a separate cleanup RPC. A bucket remains
+  -- for at least its largest observed window and at least 48 hours; deleting
+  -- at most 100 rows per consume keeps normal rate-limit calls bounded.
+  with expired_buckets as (
+    select bucket.bucket_key
+    from public.rate_limit_buckets as bucket
+    where bucket.window_started_at < clock_timestamp() - greatest(
+      make_interval(secs => bucket.window_seconds),
+      interval '48 hours'
+    )
+    order by bucket.window_started_at
+    for update skip locked
+    limit 100
+  )
+  delete from public.rate_limit_buckets as bucket
+  using expired_buckets
+  where bucket.bucket_key = expired_buckets.bucket_key;
 
   return coalesce(allowed, false);
 end;

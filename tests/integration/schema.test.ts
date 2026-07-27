@@ -198,6 +198,39 @@ describeWithSupabase('lucky draw schema', () => {
     expect(results.filter((result) => !result)).toHaveLength(2);
   });
 
+  it('purges rate-limit buckets past their retention horizon during consumption', async () => {
+    const staleKey = `email:${uniqueSlug()}`;
+    const activeKey = `ip:${uniqueSlug()}`;
+    testRateLimitKeys.push(staleKey, activeKey);
+    const { error: staleBucketError } = await supabase.from('rate_limit_buckets').insert({
+      bucket_key: staleKey,
+      window_started_at: new Date(Date.now() - 49 * 60 * 60 * 1_000).toISOString(),
+      window_seconds: 60,
+      request_count: 1,
+    });
+
+    if (staleBucketError) {
+      throw new Error(`${staleBucketError.code}: ${staleBucketError.message}`);
+    }
+
+    await expect(
+      callRpc<boolean>('consume_raffle_rate_limit', {
+        key: activeKey,
+        limit: 1,
+        window_seconds: 60,
+      }),
+    ).resolves.toBe(true);
+
+    const { data: staleBucket, error: staleBucketQueryError } = await supabase
+      .from('rate_limit_buckets')
+      .select('bucket_key')
+      .eq('bucket_key', staleKey)
+      .maybeSingle();
+
+    expect(staleBucketQueryError).toBeNull();
+    expect(staleBucket).toBeNull();
+  });
+
   it('issues one number and one receipt job when verification is repeated', async () => {
     const campaign = await createCampaign();
     const entry = await createEntry({ campaignId: campaign.id, email: 'verify@example.com' });
