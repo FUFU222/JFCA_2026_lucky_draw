@@ -203,10 +203,11 @@ begin
   with expired_buckets as (
     select bucket.bucket_key
     from public.rate_limit_buckets as bucket
-    where bucket.window_started_at < clock_timestamp() - greatest(
-      make_interval(secs => bucket.window_seconds),
-      interval '48 hours'
-    )
+    where bucket.window_started_at < now() - interval '48 hours'
+      and bucket.window_started_at < clock_timestamp() - greatest(
+        make_interval(secs => bucket.window_seconds),
+        interval '48 hours'
+      )
     order by bucket.window_started_at
     for update skip locked
     limit 100
