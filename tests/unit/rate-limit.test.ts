@@ -82,7 +82,7 @@ describe('SupabaseRateLimiter', () => {
     expect(calls).toEqual([
       {
         name: 'consume_raffle_rate_limit',
-        args: { key: 'email:ada@example.com', limit: 3, window_seconds: 120 },
+        args: { p_key: 'email:ada@example.com', p_limit: 3, p_window_seconds: 120 },
       },
     ]);
   });

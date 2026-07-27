@@ -187,9 +187,9 @@ describeWithSupabase('lucky draw schema', () => {
     const results = await Promise.all(
       Array.from({ length: 4 }, () =>
         callRpc<boolean>('consume_raffle_rate_limit', {
-          key,
-          limit: 2,
-          window_seconds: 60,
+          p_key: key,
+          p_limit: 2,
+          p_window_seconds: 60,
         }),
       ),
     );
@@ -215,9 +215,9 @@ describeWithSupabase('lucky draw schema', () => {
 
     await expect(
       callRpc<boolean>('consume_raffle_rate_limit', {
-        key: activeKey,
-        limit: 1,
-        window_seconds: 60,
+        p_key: activeKey,
+        p_limit: 1,
+        p_window_seconds: 60,
       }),
     ).resolves.toBe(true);
 

@@ -5,7 +5,7 @@ export interface RateLimiter {
 export interface RaffleRateLimitRpcClient {
   rpc(
     name: 'consume_raffle_rate_limit',
-    args: { key: string; limit: number; window_seconds: number },
+    args: { p_key: string; p_limit: number; p_window_seconds: number },
   ): PromiseLike<{ data: unknown; error: unknown | null }>;
 }
 
@@ -15,9 +15,9 @@ export class SupabaseRateLimiter implements RateLimiter {
   async consume(key: string, limit: number, windowSeconds: number): Promise<boolean> {
     try {
       const { data, error } = await this.client.rpc('consume_raffle_rate_limit', {
-        key,
-        limit,
-        window_seconds: windowSeconds,
+        p_key: key,
+        p_limit: limit,
+        p_window_seconds: windowSeconds,
       });
 
       return error === null && data === true;

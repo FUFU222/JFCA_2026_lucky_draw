@@ -149,10 +149,12 @@ create trigger rate_limit_buckets_set_updated_at
 before update on public.rate_limit_buckets
 for each row execute function public.set_updated_at();
 
+-- `limit` is a reserved SQL keyword and cannot name a parameter, so every
+-- argument carries the `p_` prefix.
 create or replace function public.consume_raffle_rate_limit(
-  key text,
-  limit integer,
-  window_seconds integer
+  p_key text,
+  p_limit integer,
+  p_window_seconds integer
 )
 returns boolean
 language plpgsql
@@ -162,7 +164,7 @@ as $$
 declare
   allowed boolean;
 begin
-  if key is null or length(key) = 0 or limit <= 0 or window_seconds <= 0 then
+  if p_key is null or length(p_key) = 0 or p_limit <= 0 or p_window_seconds <= 0 then
     raise exception 'Rate limit arguments must be non-empty and positive' using errcode = '22023';
   end if;
 
@@ -172,30 +174,30 @@ begin
     window_seconds,
     request_count
   )
-  values (key, clock_timestamp(), $3, 1)
+  values (p_key, clock_timestamp(), p_window_seconds, 1)
   on conflict (bucket_key) do update
   set
-    window_seconds = greatest(bucket.window_seconds, $3),
+    window_seconds = greatest(bucket.window_seconds, p_window_seconds),
     window_started_at = case
-      when bucket.window_started_at + make_interval(secs => $3) <= clock_timestamp()
+      when bucket.window_started_at + make_interval(secs => p_window_seconds) <= clock_timestamp()
         then clock_timestamp()
       else bucket.window_started_at
     end,
     request_count = case
-      when bucket.window_started_at + make_interval(secs => $3) <= clock_timestamp()
+      when bucket.window_started_at + make_interval(secs => p_window_seconds) <= clock_timestamp()
         then 1
       else bucket.request_count + 1
     end
-  where bucket.window_started_at + make_interval(secs => $3) <= clock_timestamp()
-    or bucket.request_count < limit
+  where bucket.window_started_at + make_interval(secs => p_window_seconds) <= clock_timestamp()
+    or bucket.request_count < p_limit
   returning true into allowed;
 
   -- Preserve the largest window ever requested for a key even when this call
   -- was rejected at its threshold, so cleanup cannot discard it too early.
   update public.rate_limit_buckets as bucket
-  set window_seconds = $3
-  where bucket.bucket_key = $1
-    and bucket.window_seconds < $3;
+  set window_seconds = p_window_seconds
+  where bucket.bucket_key = p_key
+    and bucket.window_seconds < p_window_seconds;
 
   -- Bound storage without exposing a separate cleanup RPC. A bucket remains
   -- for at least its largest observed window and at least 48 hours; deleting
@@ -369,6 +371,13 @@ alter table public.rate_limit_buckets enable row level security;
 revoke all on table public.campaigns, public.raffle_entries, public.verification_tokens,
   public.admin_audit_logs, public.email_outbox, public.email_deliveries,
   public.rate_limit_buckets from public, anon, authenticated;
+
+-- Supabase does not grant table DML to `service_role` by default, and the
+-- server is the only client that ever touches these tables. Grant exactly the
+-- statements it needs rather than relying on a platform default.
+grant select, insert, update, delete on table public.campaigns, public.raffle_entries,
+  public.verification_tokens, public.admin_audit_logs, public.email_outbox,
+  public.email_deliveries, public.rate_limit_buckets to service_role;
 
 revoke all on function public.set_updated_at() from public, anon, authenticated;
 revoke all on function public.consume_raffle_rate_limit(text, integer, integer)
