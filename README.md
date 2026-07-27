@@ -24,17 +24,25 @@ SUPABASE_SERVICE_ROLE_KEY=<service_role key printed by Supabase>
 
 Do not commit `.env.test.local`.
 
-The schema integration test uses these two variables and deliberately skips only
-when they are absent. With local Supabase running, apply the migration and seed
-before running it:
+`tests/setup.ts` loads this file, so no shell export is needed. Two suites use
+these variables and skip only when they are absent locally; in CI a missing
+database is a hard failure, because a skipped schema suite once let a migration
+that Postgres could not even parse through the pipeline.
+
+With local Supabase running, apply the migrations and seed before running them:
 
 ```bash
 pnpm exec supabase db reset
-pnpm test --run tests/integration/schema.test.ts
+pnpm test --run tests/integration/schema.test.ts tests/integration/raffle-repository.test.ts
 ```
 
-The test connects with `SUPABASE_SERVICE_ROLE_KEY`, because browser clients have
-no direct database access and never receive that key.
+`schema.test.ts` covers the tables, constraints, and RPCs.
+`raffle-repository.test.ts` drives the real Supabase adapter and the
+registration service end to end, so the SQL the application depends on is
+exercised rather than assumed.
+
+Both connect with `SUPABASE_SERVICE_ROLE_KEY`, because browser clients have no
+direct database access and never receive that key.
 
 ### Production campaign seed
 
@@ -78,4 +86,15 @@ pnpm audit --prod --audit-level high
 pnpm audit --audit-level high
 ```
 
-`RECEIPT_TOKEN_SECRET` is production-only. Generate a long random value before launch and keep it unchanged afterwards: it derives permanent receipt URLs.
+## Token secrets
+
+The server never stores a bearer token, only its SHA-256 hash, so both links are
+derived from a stored identifier and a secret.
+
+- `RECEIPT_TOKEN_SECRET` derives the permanent number-page URL. Generate a long
+  random value before launch and never change it: every receipt link already in
+  a visitor's inbox stops resolving if you do.
+- `VERIFICATION_TOKEN_SECRET` derives the confirmation link from the token row
+  id, which is what lets a resend send the same link without the plaintext ever
+  being written down. Rotating it invalidates every link that has been sent and
+  not yet used.

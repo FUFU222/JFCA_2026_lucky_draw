@@ -1,10 +1,13 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const hasSupabaseIntegration = Boolean(url && serviceRoleKey);
-const describeWithSupabase = hasSupabaseIntegration ? describe : describe.skip;
+import {
+  hasSupabaseCredentials,
+  supabaseServiceRoleKey,
+  supabaseUrl,
+} from '../supabase-env';
+
+const describeWithSupabase = hasSupabaseCredentials ? describe : describe.skip;
 
 type EntryInput = {
   campaignId: string;
@@ -79,6 +82,29 @@ async function createVerificationToken(entryId: string, expiresAt: string) {
   return tokenHash;
 }
 
+async function createVerificationTokenRow(entryId: string, expiresAt: string) {
+  const { data, error } = await supabase
+    .from('verification_tokens')
+    .insert({
+      entry_id: entryId,
+      token_hash: `verification-${uniqueSlug()}`,
+      expires_at: expiresAt,
+    })
+    .select('id, token_hash')
+    .single();
+
+  if (error || !data) {
+    throw new Error(error?.message ?? 'Verification token was not created');
+  }
+
+  return data as { id: string; token_hash: string };
+}
+
+async function rpcError(name: string, args: Record<string, unknown>) {
+  const { error } = await supabase.rpc(name, args);
+  return error;
+}
+
 async function callRpc<T>(name: string, args: Record<string, unknown> = {}) {
   const { data, error } = await supabase.rpc(name, args);
 
@@ -91,7 +117,7 @@ async function callRpc<T>(name: string, args: Record<string, unknown> = {}) {
 
 describeWithSupabase('lucky draw schema', () => {
   beforeAll(() => {
-    supabase = createClient(url!, serviceRoleKey!, {
+    supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
       auth: { persistSession: false },
     });
   });
@@ -260,6 +286,140 @@ describeWithSupabase('lucky draw schema', () => {
 
     expect(error).toBeNull();
     expect(jobs).toHaveLength(1);
+  });
+
+  it('increments a verification send only once under concurrency', async () => {
+    const campaign = await createCampaign();
+    const entry = await createEntry({ campaignId: campaign.id, email: 'send@example.com' });
+    const token = await createVerificationTokenRow(
+      entry.id,
+      new Date(Date.now() + 60_000).toISOString(),
+    );
+
+    const claims = await Promise.all(
+      Array.from({ length: 4 }, () =>
+        callRpc<boolean>('claim_verification_send', {
+          p_token_id: token.id,
+          p_max_sends: 3,
+          p_cooldown_seconds: 120,
+        }),
+      ),
+    );
+
+    expect(claims.filter(Boolean)).toHaveLength(1);
+
+    const { data: after, error } = await supabase
+      .from('verification_tokens')
+      .select('send_count, last_sent_at')
+      .eq('id', token.id)
+      .single();
+
+    expect(error).toBeNull();
+    expect(after?.send_count).toBe(1);
+    expect(after?.last_sent_at).not.toBeNull();
+  });
+
+  it('refuses a verification send once the cooldown, ceiling, or lifetime is exhausted', async () => {
+    const campaign = await createCampaign();
+    const entry = await createEntry({ campaignId: campaign.id, email: 'cooldown@example.com' });
+    const token = await createVerificationTokenRow(
+      entry.id,
+      new Date(Date.now() + 60_000).toISOString(),
+    );
+    const claim = (overrides: Record<string, unknown> = {}) =>
+      callRpc<boolean>('claim_verification_send', {
+        p_token_id: token.id,
+        p_max_sends: 3,
+        p_cooldown_seconds: 120,
+        ...overrides,
+      });
+
+    await expect(claim()).resolves.toBe(true);
+    // The cooldown has not elapsed, so the second attempt is refused.
+    await expect(claim()).resolves.toBe(false);
+    // With no cooldown the ceiling is the only remaining limit.
+    await expect(claim({ p_cooldown_seconds: 0 })).resolves.toBe(true);
+    await expect(claim({ p_cooldown_seconds: 0 })).resolves.toBe(true);
+    await expect(claim({ p_cooldown_seconds: 0 })).resolves.toBe(false);
+
+    const expired = await createVerificationTokenRow(
+      entry.id,
+      new Date(Date.now() - 1_000).toISOString(),
+    );
+
+    await expect(
+      callRpc<boolean>('claim_verification_send', {
+        p_token_id: expired.id,
+        p_max_sends: 3,
+        p_cooldown_seconds: 0,
+      }),
+    ).resolves.toBe(false);
+  });
+
+  it('leases one entry receipt job to only one concurrent sender', async () => {
+    const campaign = await createCampaign();
+    const entry = await createEntry({ campaignId: campaign.id, email: 'receipt@example.com' });
+    const { error: jobError } = await supabase
+      .from('email_outbox')
+      .insert({ entry_id: entry.id, kind: 'RECEIPT' });
+
+    if (jobError) {
+      throw new Error(`${jobError.code}: ${jobError.message}`);
+    }
+
+    const claims = await Promise.all([
+      callRpc<unknown[]>('claim_email_outbox_job_for_entry', {
+        p_entry_id: entry.id,
+        p_kind: 'RECEIPT',
+      }),
+      callRpc<unknown[]>('claim_email_outbox_job_for_entry', {
+        p_entry_id: entry.id,
+        p_kind: 'RECEIPT',
+      }),
+    ]);
+
+    expect(claims.flat()).toHaveLength(1);
+  });
+
+  it('reports an unusable verification link with a distinct error code', async () => {
+    const campaign = await createCampaign();
+    const entry = await createEntry({ campaignId: campaign.id, email: 'code@example.com' });
+    const tokenHash = await createVerificationToken(
+      entry.id,
+      new Date(Date.now() - 60_000).toISOString(),
+    );
+
+    const expiredError = await rpcError('confirm_raffle_verification', {
+      token_hash: tokenHash,
+      receipt_token_hash: `receipt-${uniqueSlug()}`,
+    });
+    const missingError = await rpcError('confirm_raffle_verification', {
+      token_hash: `absent-${uniqueSlug()}`,
+      receipt_token_hash: `receipt-${uniqueSlug()}`,
+    });
+
+    expect(expiredError?.code).toBe('RD001');
+    expect(missingError?.code).toBe('RD001');
+  });
+
+  it('reports a receipt-secret mismatch separately from an unusable link', async () => {
+    const campaign = await createCampaign();
+    const entry = await createEntry({ campaignId: campaign.id, email: 'rotated@example.com' });
+    const tokenHash = await createVerificationToken(
+      entry.id,
+      new Date(Date.now() + 60_000).toISOString(),
+    );
+
+    await callRpc<number>('confirm_raffle_verification', {
+      token_hash: tokenHash,
+      receipt_token_hash: `receipt-${uniqueSlug()}`,
+    });
+    const rotatedError = await rpcError('confirm_raffle_verification', {
+      token_hash: tokenHash,
+      receipt_token_hash: `receipt-${uniqueSlug()}`,
+    });
+
+    expect(rotatedError?.code).toBe('RD002');
   });
 
   it('rejects an expired verification token without issuing a number', async () => {

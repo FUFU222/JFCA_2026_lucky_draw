@@ -1,0 +1,332 @@
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+
+import { SupabaseRaffleRepository } from '../../lib/db/server';
+import { SupabaseRateLimiter } from '../../lib/raffle/rate-limit';
+import { RaffleService, type RaffleMailer } from '../../lib/raffle/service';
+
+import {
+  hasSupabaseCredentials,
+  supabaseServiceRoleKey,
+  supabaseUrl,
+} from '../supabase-env';
+
+const describeWithSupabase = hasSupabaseCredentials ? describe : describe.skip;
+
+const VERIFICATION_SECRET = 'repository-test-verification-secret';
+const RECEIPT_SECRET = 'repository-test-receipt-secret';
+
+class FakeMailer implements RaffleMailer {
+  readonly verification: Array<{ eventSlug: string; email: string; token: string }> = [];
+  readonly receipts: Array<{ email: string; number: bigint; receiptToken: string }> = [];
+  receiptFailure: Error | null = null;
+
+  async sendVerification(input: { eventSlug: string; email: string; token: string }) {
+    this.verification.push(input);
+    return { id: `verification-${this.verification.length}` };
+  }
+
+  async sendReceipt(input: { email: string; number: bigint; receiptToken: string }) {
+    if (this.receiptFailure) throw this.receiptFailure;
+    this.receipts.push(input);
+    return { id: `receipt-${this.receipts.length}` };
+  }
+}
+
+let supabase: SupabaseClient;
+const createdCampaignIds: string[] = [];
+
+function uniqueSuffix() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+async function createOpenCampaign() {
+  const slug = `repo-test-${uniqueSuffix()}`;
+  const { data, error } = await supabase
+    .from('campaigns')
+    .insert({
+      slug,
+      title: 'Repository test',
+      status: 'SCHEDULED',
+      opens_at: new Date(Date.now() - 60_000).toISOString(),
+      draw_starts_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
+      terms_version: 'repo-test-v1',
+    })
+    .select('id, slug')
+    .single();
+
+  if (error || !data) throw new Error(error?.message ?? 'Campaign was not created');
+  createdCampaignIds.push(data.id);
+  return data as { id: string; slug: string };
+}
+
+function buildService(mailer: FakeMailer) {
+  return new RaffleService({
+    repository: new SupabaseRaffleRepository(supabase),
+    mailer,
+    turnstile: { verify: async () => true },
+    rateLimiter: new SupabaseRateLimiter(supabase),
+    verificationTokenSecret: VERIFICATION_SECRET,
+    receiptTokenSecret: RECEIPT_SECRET,
+  });
+}
+
+/**
+ * Exercises the real Supabase adapter and its RPCs. The service suite proves
+ * the decisions; this proves the SQL those decisions rely on actually exists
+ * and behaves as the adapter assumes.
+ */
+describeWithSupabase('SupabaseRaffleRepository', () => {
+  beforeAll(() => {
+    supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
+      auth: { persistSession: false },
+    });
+  });
+
+  afterEach(async () => {
+    const campaignIds = createdCampaignIds.splice(0, createdCampaignIds.length);
+    if (campaignIds.length === 0) return;
+
+    const { data: entries } = await supabase
+      .from('raffle_entries')
+      .select('id')
+      .in('campaign_id', campaignIds);
+    const entryIds = (entries ?? []).map((entry) => entry.id);
+
+    if (entryIds.length > 0) {
+      await supabase.from('email_deliveries').delete().in('entry_id', entryIds);
+      await supabase.from('email_outbox').delete().in('entry_id', entryIds);
+      await supabase.from('verification_tokens').delete().in('entry_id', entryIds);
+    }
+    await supabase.from('raffle_entries').delete().in('campaign_id', campaignIds);
+    await supabase.from('campaigns').delete().in('id', campaignIds);
+  });
+
+  it('carries a submission through to an issued number and a sent receipt', async () => {
+    const campaign = await createOpenCampaign();
+    const mailer = new FakeMailer();
+    const service = buildService(mailer);
+    const email = `flow-${uniqueSuffix()}@example.com`;
+
+    await expect(
+      service.requestVerification({
+        eventSlug: campaign.slug,
+        email: email.toUpperCase(),
+        locale: 'ja',
+        termsConsent: true,
+        turnstileToken: 'captcha',
+        ipAddress: '203.0.113.10',
+        firstName: 'Ada',
+        country: 'Canada',
+        region: 'Ontario',
+      }),
+    ).resolves.toEqual({ accepted: true });
+
+    expect(mailer.verification).toHaveLength(1);
+    const { data: entry } = await supabase
+      .from('raffle_entries')
+      .select('email, state, locale, first_name, region')
+      .eq('campaign_id', campaign.id)
+      .single();
+    expect(entry).toMatchObject({
+      email,
+      state: 'PENDING',
+      locale: 'ja',
+      first_name: 'Ada',
+      region: 'Ontario',
+    });
+
+    const confirmed = await service.confirmVerification({
+      eventSlug: campaign.slug,
+      token: mailer.verification[0].token,
+    });
+
+    expect(confirmed?.number).toBe(BigInt(10_000));
+    expect(mailer.receipts).toHaveLength(1);
+    expect(mailer.receipts[0].receiptToken).toBe(confirmed?.receiptToken);
+
+    const { data: verified } = await supabase
+      .from('raffle_entries')
+      .select('state, number, receipt_token_hash')
+      .eq('campaign_id', campaign.id)
+      .single();
+    expect(verified).toMatchObject({ state: 'VERIFIED', number: 10_000 });
+    expect(verified?.receipt_token_hash).not.toBe(confirmed?.receiptToken);
+
+    const { data: outbox } = await supabase
+      .from('email_outbox')
+      .select('status')
+      .eq('entry_id', (await entryId(campaign.id)) ?? '');
+    expect(outbox).toEqual([{ status: 'SENT' }]);
+  });
+
+  it('matches an address exactly, so a wildcard character cannot reach another entry', async () => {
+    const campaign = await createOpenCampaign();
+    const repository = new SupabaseRaffleRepository(supabase);
+    const suffix = uniqueSuffix();
+    const stored = `a_b-${suffix}@example.com`;
+
+    await repository.createPendingEntry({
+      campaign_id: campaign.id,
+      email: stored,
+      locale: 'en',
+      terms_version: 'repo-test-v1',
+      terms_consented_at: new Date().toISOString(),
+      first_name: null,
+      last_name: null,
+      phone: null,
+      gender: null,
+      date_of_birth: null,
+      country: null,
+      region: null,
+    });
+
+    await expect(repository.findEntryByEmail(campaign.id, stored)).resolves.toMatchObject({
+      email: stored,
+    });
+    // `_` is a single-character wildcard in a pattern match but must be literal here.
+    await expect(
+      repository.findEntryByEmail(campaign.id, `axb-${suffix}@example.com`),
+    ).resolves.toBeNull();
+  });
+
+  it('issues one number and one receipt for concurrent confirmations of the same link', async () => {
+    const campaign = await createOpenCampaign();
+    const mailer = new FakeMailer();
+    const service = buildService(mailer);
+
+    await service.requestVerification({
+      eventSlug: campaign.slug,
+      email: `concurrent-${uniqueSuffix()}@example.com`,
+      locale: 'en',
+      termsConsent: true,
+      turnstileToken: 'captcha',
+    });
+    const token = mailer.verification[0].token;
+
+    const results = await Promise.all([
+      service.confirmVerification({ eventSlug: campaign.slug, token }),
+      service.confirmVerification({ eventSlug: campaign.slug, token }),
+    ]);
+
+    expect(results.map((result) => result?.number)).toEqual([BigInt(10_000), BigInt(10_000)]);
+    expect(mailer.receipts).toHaveLength(1);
+
+    const { data: campaignAfter } = await supabase
+      .from('campaigns')
+      .select('next_number')
+      .eq('id', campaign.id)
+      .single();
+    expect(campaignAfter?.next_number).toBe(10_001);
+  });
+
+  it('leaves a failed receipt retryable without invalidating the number', async () => {
+    const campaign = await createOpenCampaign();
+    const mailer = new FakeMailer();
+    const service = buildService(mailer);
+
+    await service.requestVerification({
+      eventSlug: campaign.slug,
+      email: `failed-${uniqueSuffix()}@example.com`,
+      locale: 'en',
+      termsConsent: true,
+      turnstileToken: 'captcha',
+    });
+    mailer.receiptFailure = new Error('resend unavailable');
+
+    const confirmed = await service.confirmVerification({
+      eventSlug: campaign.slug,
+      token: mailer.verification[0].token,
+    });
+
+    expect(confirmed?.number).toBe(BigInt(10_000));
+
+    const entry = await entryId(campaign.id);
+    const { data: job } = await supabase
+      .from('email_outbox')
+      .select('status, attempt_count, last_error, available_at')
+      .eq('entry_id', entry ?? '')
+      .single();
+    expect(job).toMatchObject({
+      status: 'FAILED',
+      attempt_count: 1,
+      last_error: 'resend unavailable',
+    });
+    expect(new Date(job?.available_at ?? '').getTime()).toBeGreaterThan(Date.now());
+
+    const { data: deliveries } = await supabase
+      .from('email_deliveries')
+      .select('kind, provider_status, provider_error')
+      .eq('entry_id', entry ?? '')
+      .eq('kind', 'RECEIPT');
+    expect(deliveries).toEqual([
+      { kind: 'RECEIPT', provider_status: 'FAILED', provider_error: 'resend unavailable' },
+    ]);
+  });
+
+  it('sends once per cooldown and never more than three times for one token', async () => {
+    const campaign = await createOpenCampaign();
+    const mailer = new FakeMailer();
+    const service = buildService(mailer);
+    const email = `cooldown-${uniqueSuffix()}@example.com`;
+    const request = {
+      eventSlug: campaign.slug,
+      email,
+      locale: 'en' as const,
+      termsConsent: true as const,
+      turnstileToken: 'captcha',
+    };
+
+    await service.requestVerification(request);
+    await service.requestVerification(request);
+
+    // The second submission is inside the 2-minute cooldown, so it reuses the
+    // token without sending again.
+    expect(mailer.verification).toHaveLength(1);
+
+    const entry = await entryId(campaign.id);
+    const { data: tokens } = await supabase
+      .from('verification_tokens')
+      .select('id, send_count')
+      .eq('entry_id', entry ?? '');
+    expect(tokens).toHaveLength(1);
+    expect(tokens?.[0].send_count).toBe(1);
+  });
+
+  it('rejects a link that belongs to another campaign', async () => {
+    const campaign = await createOpenCampaign();
+    const other = await createOpenCampaign();
+    const mailer = new FakeMailer();
+    const service = buildService(mailer);
+
+    await service.requestVerification({
+      eventSlug: campaign.slug,
+      email: `slug-${uniqueSuffix()}@example.com`,
+      locale: 'en',
+      termsConsent: true,
+      turnstileToken: 'captcha',
+    });
+
+    await expect(
+      service.confirmVerification({ eventSlug: other.slug, token: mailer.verification[0].token }),
+    ).resolves.toBeNull();
+  });
+
+  it('reports an unknown link as unusable rather than as a server fault', async () => {
+    const service = buildService(new FakeMailer());
+
+    await expect(
+      service.confirmVerification({ eventSlug: 'jfca-2026', token: 'z'.repeat(43) }),
+    ).resolves.toBeNull();
+  });
+});
+
+async function entryId(campaignId: string): Promise<string | null> {
+  const { data } = await supabase
+    .from('raffle_entries')
+    .select('id')
+    .eq('campaign_id', campaignId)
+    .limit(1)
+    .maybeSingle();
+  return data?.id ?? null;
+}

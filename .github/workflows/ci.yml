@@ -37,8 +37,25 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Unit tests
+      # The database suites must actually run here. When they skipped, a
+      # migration that Postgres could not even parse passed CI.
+      - name: Start local Supabase
+        run: pnpm exec supabase start
+
+      - name: Export Supabase test credentials
+        run: |
+          status="$(pnpm exec supabase status -o json)"
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=$(echo "$status" | jq -r .API_URL)"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$(echo "$status" | jq -r .SERVICE_ROLE_KEY)"
+          } >> "$GITHUB_ENV"
+
+      - name: Unit and integration tests
         run: pnpm test
+
+      - name: Stop local Supabase
+        if: always()
+        run: pnpm exec supabase stop --no-backup
 
       - name: Production build
         run: pnpm build

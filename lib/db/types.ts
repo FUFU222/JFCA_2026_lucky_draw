@@ -25,6 +25,13 @@ export interface RaffleEntry {
   id: string;
   campaign_id: string;
   email: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  phone?: string | null;
+  gender?: string | null;
+  date_of_birth?: string | null;
+  country?: string | null;
+  region?: string | null;
   locale: EntryLocale;
   terms_version: string;
   terms_consented_at: string;
