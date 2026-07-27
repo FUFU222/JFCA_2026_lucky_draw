@@ -6,7 +6,7 @@ export interface RaffleRateLimitRpcClient {
   rpc(
     name: 'consume_raffle_rate_limit',
     args: { key: string; limit: number; window_seconds: number },
-  ): Promise<{ data: unknown; error: unknown | null }>;
+  ): PromiseLike<{ data: unknown; error: unknown | null }>;
 }
 
 export class SupabaseRateLimiter implements RateLimiter {

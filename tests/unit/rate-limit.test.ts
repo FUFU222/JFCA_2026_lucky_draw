@@ -33,6 +33,17 @@ class InMemoryRateLimiter implements RateLimiter {
   }
 }
 
+class SupabaseLikeRpcBuilder<T> implements PromiseLike<T> {
+  constructor(private readonly response: T) {}
+
+  then<TResult1 = T, TResult2 = never>(
+    onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): PromiseLike<TResult1 | TResult2> {
+    return Promise.resolve(this.response).then(onfulfilled, onrejected);
+  }
+}
+
 describe('RateLimiter', () => {
   it('allows requests through the threshold and resets after the window', async () => {
     const limiter = new InMemoryRateLimiter();
@@ -48,6 +59,14 @@ describe('RateLimiter', () => {
 });
 
 describe('SupabaseRateLimiter', () => {
+  it('accepts a Supabase-style PromiseLike RPC builder', async () => {
+    const client: RaffleRateLimitRpcClient = {
+      rpc: () => new SupabaseLikeRpcBuilder({ data: true, error: null }),
+    };
+
+    await expect(new SupabaseRateLimiter(client).consume('key', 1, 60)).resolves.toBe(true);
+  });
+
   it('delegates consumption to the raffle rate-limit RPC', async () => {
     const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
     const client: RaffleRateLimitRpcClient = {
