@@ -188,7 +188,7 @@ export const messages = {
     },
 
     receipt: {
-      label: 'Your Lucky Draw Number',
+      label: 'あなたの抽選番号',
       heading: 'ご応募を受け付けました',
       screenshot: 'この番号をお控えください。スクリーンショットでの保存がおすすめです。',
       venue: '抽選結果は会場で発表されます。上記の番号とお照らし合わせください。',

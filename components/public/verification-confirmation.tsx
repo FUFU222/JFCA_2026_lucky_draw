@@ -68,7 +68,7 @@ export function VerificationConfirmation({
         type="button"
         disabled={busy}
         onClick={() => setDialogOpen(true)}
-        className="min-h-14 w-full rounded-lg bg-neutral-900 px-6 text-base font-semibold text-white disabled:opacity-40"
+        className="min-h-14 w-full rounded-lg bg-[var(--brand-accent)] px-6 text-base font-semibold text-white transition-colors hover:bg-[var(--brand-accent-hover)] active:bg-[var(--brand-accent-hover)] disabled:bg-neutral-400"
       >
         {busy ? t.working : t.action}
       </button>

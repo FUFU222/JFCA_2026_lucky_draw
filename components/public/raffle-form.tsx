@@ -220,7 +220,7 @@ export function RaffleForm({
           type="button"
           disabled={!captchaToken || status === 'sending'}
           onClick={() => setDialog('resend')}
-          className="min-h-12 w-full rounded-lg border border-neutral-300 px-5 text-base font-semibold text-neutral-800 disabled:opacity-40"
+          className="min-h-12 w-full rounded-lg border border-neutral-300 px-5 text-base font-semibold text-neutral-800 transition-colors hover:border-neutral-400 disabled:opacity-40"
         >
           {status === 'sending' ? t.submitting : submitted.resend}
         </button>
@@ -344,7 +344,10 @@ export function RaffleForm({
 
       <section className="space-y-4 border-t border-neutral-200 pt-8">
         <div>
-          <h2 className="text-xl font-bold text-neutral-900">{t.numberHeading}</h2>
+          <h2 className="flex items-center gap-2 text-xl font-bold text-neutral-900">
+            <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-[var(--brand-accent)]" />
+            {t.numberHeading}
+          </h2>
           <p className="mt-1 text-sm text-neutral-600">{t.numberNote}</p>
         </div>
 
@@ -405,7 +408,7 @@ export function RaffleForm({
         <button
           type="submit"
           disabled={!canSend}
-          className="min-h-14 w-full rounded-lg bg-neutral-900 px-6 text-base font-semibold text-white disabled:opacity-40"
+          className="min-h-14 w-full rounded-lg bg-[var(--brand-accent)] px-6 text-base font-semibold text-white transition-colors hover:bg-[var(--brand-accent-hover)] active:bg-[var(--brand-accent-hover)] disabled:bg-neutral-400"
         >
           {status === 'sending' ? t.submitting : t.submit}
         </button>

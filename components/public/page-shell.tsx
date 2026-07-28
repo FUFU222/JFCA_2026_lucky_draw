@@ -20,6 +20,7 @@ export function PageShell({
 }) {
   return (
     <main className="mx-auto min-h-dvh w-full max-w-xl px-5 pb-16 pt-6">
+      <div aria-hidden="true" className="fixed inset-x-0 top-0 h-1 bg-[var(--brand-accent)]" />
       <header className="mb-8 flex items-center justify-between gap-4">
         <Image
           src={logo}

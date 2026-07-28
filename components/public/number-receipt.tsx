@@ -1,6 +1,23 @@
+import type { CSSProperties } from 'react';
+
 import { SUPPORT_EMAIL } from '../../lib/campaign/legal';
 import { messagesFor, type Locale } from '../../lib/i18n/messages';
 import { formatRaffleNumber } from '../../lib/raffle/number';
+
+/**
+ * Six pieces, not a screenful — enough to say "this was issued" without
+ * turning the ticket into decoration. Purely CSS: no JS, no bundle cost, and
+ * `prefers-reduced-motion` collapses every one of them to a static dot via
+ * the sitewide rule in globals.css.
+ */
+const CONFETTI: Array<{ left: string; color: string; tx: string; ty: string; rot: string; delay: string }> = [
+  { left: '12%', color: 'var(--brand-accent)', tx: '-18px', ty: '-26px', rot: '-35deg', delay: '0ms' },
+  { left: '28%', color: 'var(--brand-gold)', tx: '-8px', ty: '-34px', rot: '20deg', delay: '60ms' },
+  { left: '50%', color: 'var(--foreground)', tx: '2px', ty: '-38px', rot: '-10deg', delay: '30ms' },
+  { left: '68%', color: 'var(--brand-gold)', tx: '14px', ty: '-30px', rot: '40deg', delay: '90ms' },
+  { left: '84%', color: 'var(--brand-accent)', tx: '22px', ty: '-24px', rot: '-20deg', delay: '45ms' },
+  { left: '92%', color: 'var(--foreground)', tx: '30px', ty: '-16px', rot: '15deg', delay: '75ms' },
+];
 
 /**
  * The number is the only thing on this page that matters, so it is the only
@@ -14,11 +31,32 @@ export function NumberReceipt({ number, locale }: { number: bigint; locale: Loca
     <section className="space-y-6">
       <h1 className="text-2xl font-bold text-neutral-900">{t.heading}</h1>
 
-      <div className="rounded-2xl border border-neutral-200 bg-neutral-50 px-6 py-10 text-center">
-        <p className="text-sm font-medium uppercase tracking-wide text-neutral-500">{t.label}</p>
-        <p className="mt-3 text-5xl font-bold tabular-nums tracking-tight text-neutral-900 sm:text-6xl">
-          {formatRaffleNumber(number)}
-        </p>
+      <div className="relative">
+        {CONFETTI.map((piece, index) => (
+          <span
+            key={index}
+            aria-hidden="true"
+            className="confetti-piece"
+            style={
+              {
+                left: piece.left,
+                top: 0,
+                backgroundColor: piece.color,
+                animationDelay: piece.delay,
+                '--tx': piece.tx,
+                '--ty': piece.ty,
+                '--rot': piece.rot,
+              } as CSSProperties
+            }
+          />
+        ))}
+
+        <div className="ticket-pop rounded-2xl border-2 border-[var(--brand-accent)] bg-[var(--brand-tint)] px-6 py-10 text-center">
+          <p className="text-sm font-medium uppercase tracking-wide text-neutral-500">{t.label}</p>
+          <p className="mt-3 text-5xl font-bold tabular-nums tracking-tight text-neutral-900 sm:text-6xl">
+            {formatRaffleNumber(number)}
+          </p>
+        </div>
       </div>
 
       <p className="text-[15px] leading-relaxed text-neutral-800">{t.screenshot}</p>

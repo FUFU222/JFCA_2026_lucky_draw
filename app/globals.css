@@ -4,6 +4,9 @@
   --background: #ffffff;
   --foreground: #171717;
   --brand-accent: #c8102e;
+  --brand-accent-hover: #a10d24;
+  --brand-tint: #fdf1f2;
+  --brand-gold: #e8a33d;
 }
 
 body {
@@ -73,4 +76,48 @@ body {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/*
+ * The one moment on the site worth a flourish: the number is issued once,
+ * ever, so the reveal on `NumberReceipt` gets a pop-in and a small confetti
+ * burst. Both are pure CSS (no JS, no bundle cost) and both collapse to a
+ * static, fully-legible number under the reduced-motion rule above.
+ */
+@keyframes ticket-pop {
+  0% {
+    transform: scale(0.85);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.04);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.ticket-pop {
+  animation: ticket-pop 500ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes confetti-burst {
+  0% {
+    transform: translate(0, 0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--tx), var(--ty)) rotate(var(--rot));
+    opacity: 0;
+  }
+}
+
+.confetti-piece {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  animation: confetti-burst 900ms ease-out both;
 }
