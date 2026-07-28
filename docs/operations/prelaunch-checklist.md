@@ -38,6 +38,16 @@ printed, the URL it points at cannot be changed.
 
 ## 2. Resend
 
+The plan and the raised rate limit are for this event only — see the teardown
+step in [on-site-runbook.md](on-site-runbook.md). Cancel by **2026-08-31**.
+
+- [ ] **Choose a plan that covers roughly 60,000 messages**: about 30,000
+      entrants, each receiving a verification email and a number receipt. The
+      free allowance is nowhere near this.
+- [ ] **Ask Resend to raise the API rate limit.** The default is around two
+      requests per second. Both messages are sent inline as visitors arrive, so
+      30,000 entrants over seven hours averages above that before any peak. This
+      needs a support request, so raise it on the same day as the plan change.
 - [ ] Verify the sending domain for `info@chairman.jp`: SPF and DKIM records
       published, and DMARC checked if the domain has a policy.
 - [ ] Send one test message to a Gmail address and one to an Outlook address, and

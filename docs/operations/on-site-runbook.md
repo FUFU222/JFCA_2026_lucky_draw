@@ -93,5 +93,13 @@ recorded with who ran it and how many rows — never the rows themselves.
 ## After the event
 
 1. Set the campaign to `CLOSED`.
-2. Export the final CSV.
-3. Confirm "Emails waiting to send" has reached zero.
+2. Confirm "Emails waiting to send" has reached zero. Do not go further until it
+   has — a receipt still queued has not reached its owner yet.
+3. Export the final CSV and store it wherever entrant data belongs.
+4. **Cancel the Resend paid plan.** It was bought for this event only. Leave it
+   cancelled by **2026-08-31**. Check the outbox is empty first, and that no
+   entry is still `PENDING` with a link that has not expired — those visitors
+   can still confirm within 24 hours of their last send.
+5. Anything else bought for the event and not needed afterwards — the raised
+   Resend API rate limit, a Vercel plan taken purely for the per-minute cron —
+   goes at the same time and for the same reason.
