@@ -6,7 +6,7 @@
 - Active implementation worktree: `/Users/fufu/code/JFCA2026_lucky_draw/.worktrees/lucky-draw`
 - Branch: `codex/lucky-draw`
 - Do **not** work directly on `main`. `main` contains only the documented baseline.
-- The working tree is clean. Tasks 1–4 are committed.
+- The working tree is clean. Tasks 1–5 are committed.
 
 ## Product decisions (authoritative)
 
