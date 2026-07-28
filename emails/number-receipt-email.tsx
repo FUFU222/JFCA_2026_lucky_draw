@@ -12,6 +12,8 @@ const copy = {
     pageIntro: 'You can open your number again at any time:',
     contact: 'Lost your number? Contact',
     contactTail: 'and an operator will look it up.',
+    operator: 'LIVAPON is operated by CHAIRMAN Inc.',
+    why: 'You are receiving this because this address was entered into the Lucky Draw at Japan Festival Canada 2026.',
   },
   ja: {
     preview: '抽選番号のお知らせ',
@@ -22,6 +24,8 @@ const copy = {
     pageIntro: '番号確認ページはいつでもご覧いただけます。',
     contact: '番号がわからなくなった場合は',
     contactTail: 'までご連絡ください。応募内容を確認のうえ、2〜3日以内にご回答します。',
+    operator: 'LIVAPON は株式会社CHAIRMAN が運営しています。',
+    why: 'このメールは、Japan Festival Canada 2026 の Lucky Draw にこのアドレスでご応募いただいたためお送りしています。',
   },
 } as const;
 
@@ -74,6 +78,11 @@ export function NumberReceiptEmail({
             </Link>{' '}
             {t.contactTail}
           </Text>
+
+          <Section style={emailStyles.footer}>
+            <Text style={emailStyles.footerText}>{t.operator}</Text>
+            <Text style={emailStyles.footerText}>{t.why}</Text>
+          </Section>
         </Container>
       </Body>
     </Html>

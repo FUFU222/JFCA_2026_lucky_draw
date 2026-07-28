@@ -13,6 +13,8 @@ const copy = {
     fallback: 'If the button does not work, open this address in your browser:',
     ignore: 'If you did not enter the Lucky Draw, you can ignore this message.',
     contact: 'Questions:',
+    operator: 'LIVAPON is operated by CHAIRMAN Inc.',
+    why: 'You are receiving this because this address was entered into the Lucky Draw at Japan Festival Canada 2026.',
   },
   ja: {
     preview: '抽選番号を受け取るにはメールアドレスの確認が必要です',
@@ -25,6 +27,8 @@ const copy = {
     fallback: 'ボタンが動作しない場合は、次のアドレスをブラウザで開いてください。',
     ignore: 'お心当たりがない場合は、このメールを破棄してください。',
     contact: 'お問い合わせ先:',
+    operator: 'LIVAPON は株式会社CHAIRMAN が運営しています。',
+    why: 'このメールは、Japan Festival Canada 2026 の Lucky Draw にこのアドレスでご応募いただいたためお送りしています。',
   },
 } as const;
 
@@ -69,6 +73,11 @@ export function VerificationEmail({ locale, verificationUrl, supportEmail }: Ver
               {supportEmail}
             </Link>
           </Text>
+
+          <Section style={emailStyles.footer}>
+            <Text style={emailStyles.footerText}>{t.operator}</Text>
+            <Text style={emailStyles.footerText}>{t.why}</Text>
+          </Section>
         </Container>
       </Body>
     </Html>

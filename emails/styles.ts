@@ -78,6 +78,17 @@ export const emailStyles = {
     fontSize: '13px',
     textDecoration: 'underline',
   },
+  footer: {
+    borderTop: `1px solid ${RULE}`,
+    marginTop: '28px',
+    paddingTop: '18px',
+  },
+  footerText: {
+    color: MUTED,
+    fontSize: '12px',
+    lineHeight: '1.6',
+    margin: '0 0 6px',
+  },
   numberPanel: {
     backgroundColor: '#faf9f7',
     border: `1px solid ${RULE}`,
