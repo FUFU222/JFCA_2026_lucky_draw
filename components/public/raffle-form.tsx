@@ -361,10 +361,10 @@ export function RaffleForm({
           />
         </Field>
 
-        <label className="flex items-start gap-3 text-[15px] leading-relaxed text-neutral-800">
+        <label className="flex cursor-pointer items-start gap-3 text-[15px] leading-relaxed text-neutral-800">
           <input
             type="checkbox"
-            className="mt-1 size-5 shrink-0"
+            className="mt-1 size-6 shrink-0"
             checked={draft.consent}
             onChange={(event) => set('consent', event.target.checked)}
           />
