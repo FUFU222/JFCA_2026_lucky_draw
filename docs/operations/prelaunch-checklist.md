@@ -15,8 +15,11 @@ printed, the URL it points at cannot be changed.
       lands on the project's default site URL.
 - [ ] Auth → Rate limits: leave the hourly email limit low. Operator sign-ins are
       rare, and a high limit is a mail-bombing lever.
-- [ ] Auth → Email templates: the sign-in mail is sent by Supabase, not Resend.
-      Configure SMTP, or accept Supabase's low default sending limit and test it.
+- [ ] **Auth → SMTP: configure a real sender.** The operator sign-in link is sent
+      by Supabase, not by Resend. The built-in sender is rate limited to a
+      handful of messages an hour and frequently lands in spam, so an operator
+      who cannot sign in during the event has no way in. Point it at the same
+      provider as the transactional mail and send a test.
 
 ## 2. Resend
 
@@ -53,9 +56,15 @@ printed, the URL it points at cannot be changed.
 | `CRON_SECRET` | long random value |
 | `MAIL_DELIVERY_MODE` | `send` |
 
-- [ ] Confirm the cron in `vercel.json` appears under Settings → Cron Jobs and is
-      enabled. Without `CRON_SECRET` it will receive 401 and no retry will ever
-      run.
+- [ ] **Confirm the plan supports a per-minute cron.** `vercel.json` asks for
+      `* * * * *`. On the Hobby plan cron jobs run at most **once a day**, which
+      would leave a failed confirmation email undelivered for up to 24 hours —
+      unusable for a one-day event. A paid plan is required, or the retry worker
+      must be triggered from somewhere else.
+- [ ] Confirm the cron appears under Settings → Cron Jobs and is enabled.
+      Without `CRON_SECRET` it receives 401 and no retry will ever run.
+- [ ] The worker declares `maxDuration = 30`. Confirm the plan allows it; the
+      deploy fails loudly if not.
 - [ ] Decide `RAFFLE_IP_REQUEST_LIMIT`. The default is 500 per address per day.
       **Read the venue note in the on-site runbook before lowering it.**
 

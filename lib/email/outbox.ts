@@ -5,9 +5,11 @@ export const OUTBOX_BATCH_LIMIT = 20;
 /**
  * A cron invocation is killed at the platform's function timeout. Stopping
  * before that leaves each claimed job with a recorded outcome instead of a
- * lease that has to expire before anything retries it.
+ * lease that has to expire before anything retries it. The caller passes the
+ * budget that matches its own declared `maxDuration`; this default is a safe
+ * floor for an undeclared one.
  */
-export const OUTBOX_RUN_BUDGET_MS = 25_000;
+export const OUTBOX_RUN_BUDGET_MS = 8_000;
 const BASE_RETRY_SECONDS = 60;
 const MAX_RETRY_SECONDS = 6 * 60 * 60;
 

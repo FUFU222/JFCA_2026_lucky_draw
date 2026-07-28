@@ -14,12 +14,21 @@ import { OUTBOX_BATCH_LIMIT } from '../../../../lib/email/outbox';
  */
 export const dynamic = 'force-dynamic';
 
+/**
+ * Declared rather than left to the platform default, which is 10-15 seconds
+ * depending on plan — short enough to kill a run mid-batch and leave jobs
+ * leased until they expire. The run budget below stays well inside it.
+ */
+export const maxDuration = 30;
+
+const RUN_BUDGET_MS = 20_000;
+
 async function run(request: Request): Promise<NextResponse> {
   if (!isAuthorizedCron(request)) {
     return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
   }
 
-  const summary = await getEmailOutboxProcessor().process(OUTBOX_BATCH_LIMIT);
+  const summary = await getEmailOutboxProcessor().process(OUTBOX_BATCH_LIMIT, RUN_BUDGET_MS);
   return NextResponse.json({ ok: true, ...summary });
 }
 

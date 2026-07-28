@@ -34,7 +34,7 @@ describe('email outbox cron endpoint', () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ ok: true, claimed: 3, sent: 2, failed: 1 });
-    expect(processor.process).toHaveBeenCalledWith(20);
+    expect(processor.process).toHaveBeenCalledWith(20, 20_000);
   });
 
   it('answers Vercel Cron, which issues GET', async () => {
