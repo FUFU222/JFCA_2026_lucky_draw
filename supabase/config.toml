@@ -160,7 +160,15 @@ site_url = "http://127.0.0.1:3000"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["https://127.0.0.1:3000"]
+# The operator sign-in link lands on /auth/callback. Supabase only honours an
+# `emailRedirectTo` that is listed here, so the local dev and E2E ports are
+# allowed explicitly. The deployed project needs the production callback added
+# in the same way.
+additional_redirect_urls = [
+  "http://localhost:3000/auth/callback",
+  "http://localhost:3001/auth/callback",
+  "http://localhost:3100/auth/callback",
+]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.
@@ -196,7 +204,10 @@ password_requirements = ""
 
 [auth.rate_limit]
 # Number of emails that can be sent per hour. Requires auth.email.smtp to be enabled.
-email_sent = 2
+# Raised for local development only: the admin end-to-end suite signs in several
+# times per run. The deployed project keeps a low limit, because operator
+# sign-ins are rare and a high limit is a mail-bombing lever.
+email_sent = 200
 # Number of SMS messages that can be sent per hour. Requires auth.sms to be enabled.
 sms_sent = 30
 # Number of anonymous sign-ins that can be made per hour per IP address. Requires enable_anonymous_sign_ins = true.
