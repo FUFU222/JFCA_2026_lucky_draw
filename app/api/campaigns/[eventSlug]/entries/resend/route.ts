@@ -6,6 +6,13 @@ import {
   readJsonObject,
 } from '../../../_shared';
 
+/**
+ * Declared rather than left to the platform default of 10-15 seconds: this path
+ * calls Cloudflare and the mail provider, and being killed part-way through
+ * spends a visitor's send allowance without delivering anything.
+ */
+export const maxDuration = 30;
+
 export async function POST(request: Request, context: { params: Promise<{ eventSlug: string }> }) {
   const body = await readJsonObject(request);
   if (!body) return invalidRequest();

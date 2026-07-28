@@ -19,16 +19,14 @@ export const dynamic = 'force-dynamic';
  * depending on plan — short enough to kill a run mid-batch and leave jobs
  * leased until they expire. The run budget below stays well inside it.
  */
-export const maxDuration = 30;
-
-const RUN_BUDGET_MS = 20_000;
+export const maxDuration = 60;
 
 async function run(request: Request): Promise<NextResponse> {
   if (!isAuthorizedCron(request)) {
     return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
   }
 
-  const summary = await getEmailOutboxProcessor().process(OUTBOX_BATCH_LIMIT, RUN_BUDGET_MS);
+  const summary = await getEmailOutboxProcessor().process(OUTBOX_BATCH_LIMIT);
   return NextResponse.json({ ok: true, ...summary });
 }
 

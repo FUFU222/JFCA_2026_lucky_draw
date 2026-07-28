@@ -46,7 +46,8 @@ export const messages = {
       errorEmail: 'Enter an email address you can open right now.',
       errorConsent: 'Please agree to the Privacy Policy and the Terms.',
       errorGeneric: 'Something went wrong. Please try again.',
-      errorRateLimited: 'Too many attempts. Please wait a few minutes and try again.',
+      errorRateLimited:
+        'Too many attempts from this network. Ask a member of staff for help, or try again from mobile data.',
       errorClosed: 'Entries are not open at the moment.',
     },
 
@@ -144,7 +145,8 @@ export const messages = {
       errorEmail: 'いますぐ開けるメールアドレスをご入力ください。',
       errorConsent: 'プライバシーポリシーおよび利用規約への同意が必要です。',
       errorGeneric: '処理できませんでした。もう一度お試しください。',
-      errorRateLimited: '試行回数が上限に達しました。数分おいてからお試しください。',
+      errorRateLimited:
+        'このネットワークからの試行が上限に達しました。スタッフにお声がけいただくか、モバイル回線からお試しください。',
       errorClosed: '現在、受付を行っていません。',
     },
 

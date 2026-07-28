@@ -63,6 +63,7 @@ export interface RaffleFormProps {
 }
 
 type Status = 'editing' | 'sending' | 'submitted';
+type Screen = 'form' | 'submitted';
 
 export function RaffleForm({
   eventSlug,
@@ -78,7 +79,9 @@ export function RaffleForm({
   const [restored, setRestored] = useState(false);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [captchaFailed, setCaptchaFailed] = useState(false);
+  const [captchaRound, setCaptchaRound] = useState(0);
   const [status, setStatus] = useState<Status>('editing');
+  const [screen, setScreen] = useState<Screen>('form');
   const [dialog, setDialog] = useState<'none' | 'send' | 'resend'>('none');
   const [error, setError] = useState<string | null>(null);
   const [resendNote, setResendNote] = useState<string | null>(null);
@@ -123,8 +126,18 @@ export function RaffleForm({
         body: JSON.stringify(body),
       });
 
+      // Cloudflare will not verify the same response token twice, so it is
+      // spent the moment the request leaves, whatever the answer is.
+      setCaptchaToken(null);
+      setCaptchaRound((round) => round + 1);
+
       if (response.status === 202) return true;
-      setError(response.status === 429 ? t.errorRateLimited : errorFor(response.status, t));
+
+      // The status alone cannot tell a failed challenge from a closed event —
+      // both are 403 — and telling a visitor the raffle is closed while it is
+      // running is the worst answer available. The body says which it is.
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      setError(errorFor(payload.error, response.status, t));
       return false;
     } catch {
       setError(t.errorGeneric);
@@ -152,6 +165,7 @@ export function RaffleForm({
 
     if (!accepted) return;
     setStatus('submitted');
+    setScreen('submitted');
     try {
       window.sessionStorage.removeItem(draftKey(eventSlug));
     } catch {
@@ -162,6 +176,7 @@ export function RaffleForm({
   async function resendEntry() {
     setDialog('none');
     setResendNote(null);
+    // The screen never leaves the confirmation view while this is in flight.
     const accepted = await post(`/api/campaigns/${eventSlug}/entries/resend`, {
       email: draft.email.trim(),
       turnstile_token: captchaToken,
@@ -170,7 +185,7 @@ export function RaffleForm({
     if (accepted) setResendNote(submitted.resendDone);
   }
 
-  if (status === 'submitted' || (status === 'sending' && dialog === 'none' && resendNote !== null)) {
+  if (screen === 'submitted') {
     return (
       <section className="space-y-4">
         <h2 className="text-2xl font-bold text-neutral-900">{submitted.heading}</h2>
@@ -181,12 +196,33 @@ export function RaffleForm({
         {resendNote && <p className="text-sm text-neutral-700">{resendNote}</p>}
         {error && <p className="text-sm font-medium text-[#c8102e]">{error}</p>}
 
+        <div>
+          <TurnstileWidget
+            siteKey={turnstileSiteKey}
+            resetKey={captchaRound}
+            onToken={(token) => {
+              setCaptchaToken(token);
+              if (token) setCaptchaFailed(false);
+            }}
+            onError={() => {
+              setCaptchaToken(null);
+              setCaptchaFailed(true);
+            }}
+          />
+          {captchaFailed && (
+            <p className="mt-2 text-sm text-neutral-600" role="status">
+              {t.captchaFailed}
+            </p>
+          )}
+        </div>
+
         <button
           type="button"
+          disabled={!captchaToken || status === 'sending'}
           onClick={() => setDialog('resend')}
-          className="min-h-12 w-full rounded-lg border border-neutral-300 px-5 text-base font-semibold text-neutral-800"
+          className="min-h-12 w-full rounded-lg border border-neutral-300 px-5 text-base font-semibold text-neutral-800 disabled:opacity-40"
         >
-          {submitted.resend}
+          {status === 'sending' ? t.submitting : submitted.resend}
         </button>
 
         <ConfirmationDialog
@@ -345,6 +381,7 @@ export function RaffleForm({
         <div>
           <TurnstileWidget
             siteKey={turnstileSiteKey}
+            resetKey={captchaRound}
             onToken={(token) => {
               setCaptchaToken(token);
               if (token) setCaptchaFailed(false);
@@ -445,8 +482,21 @@ function splitOnce(value: string, needle: string): [string, string?] {
   return [value.slice(0, index), value.slice(index + needle.length)];
 }
 
-function errorFor(status: number, t: ReturnType<typeof messagesFor>['form']): string {
-  if (status === 403) return t.errorClosed;
-  if (status === 400) return t.errorEmail;
-  return t.errorGeneric;
+function errorFor(
+  code: string | undefined,
+  status: number,
+  t: ReturnType<typeof messagesFor>['form'],
+): string {
+  switch (code) {
+    case 'captcha_failed':
+      return t.captchaFailed;
+    case 'try_again_later':
+      return t.errorRateLimited;
+    case 'registration_unavailable':
+      return t.errorClosed;
+    case 'invalid_request':
+      return t.errorEmail;
+    default:
+      return status === 429 ? t.errorRateLimited : t.errorGeneric;
+  }
 }

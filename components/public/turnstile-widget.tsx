@@ -4,10 +4,12 @@ import { useEffect, useRef } from 'react';
 
 const SCRIPT_SRC = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
 const SCRIPT_ID = 'cf-turnstile-script';
+const LOAD_TIMEOUT_MS = 15_000;
 
 interface TurnstileApi {
   render: (element: HTMLElement, options: Record<string, unknown>) => string;
   remove?: (widgetId: string) => void;
+  reset?: (widgetId: string) => void;
 }
 
 declare global {
@@ -19,6 +21,12 @@ export interface TurnstileWidgetProps {
   /** Called with a token when the challenge passes, and with null when it lapses. */
   onToken: (token: string | null) => void;
   onError: () => void;
+  /**
+   * Incremented by the form after every submission. Cloudflare rejects a
+   * response token that has already been verified, so a fresh challenge has to
+   * be run before the next request rather than reusing the spent one.
+   */
+  resetKey?: number;
 }
 
 /**
@@ -26,7 +34,12 @@ export interface TurnstileWidgetProps {
  * token reaches React state instead of a hidden input, and so the send action
  * can stay disabled until a token actually exists.
  */
-export function TurnstileWidget({ siteKey, onToken, onError }: TurnstileWidgetProps) {
+export function TurnstileWidget({
+  siteKey,
+  onToken,
+  onError,
+  resetKey = 0,
+}: TurnstileWidgetProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string | null>(null);
   const callbacks = useRef({ onToken, onError });
@@ -57,7 +70,13 @@ export function TurnstileWidget({ siteKey, onToken, onError }: TurnstileWidgetPr
     };
 
     if (!tryRender()) {
-      if (!document.getElementById(SCRIPT_ID)) {
+      const existing = document.getElementById(SCRIPT_ID);
+      if (existing) {
+        // A script element left over from a failed load has no handler attached
+        // to this mount, so without this the widget would poll forever and the
+        // visitor would sit on "Checking your browser…" with no error at all.
+        existing.addEventListener('error', () => callbacks.current.onError(), { once: true });
+      } else {
         const script = document.createElement('script');
         script.id = SCRIPT_ID;
         script.src = SCRIPT_SRC;
@@ -65,12 +84,23 @@ export function TurnstileWidget({ siteKey, onToken, onError }: TurnstileWidgetPr
         script.onerror = () => callbacks.current.onError();
         document.head.appendChild(script);
       }
+
+      // The script may already have failed before this mount, in which case no
+      // error event will ever fire again. Give up rather than poll forever.
+      const giveUp = setTimeout(() => {
+        clearInterval(poll);
+        if (widgetIdRef.current === null) callbacks.current.onError();
+      }, LOAD_TIMEOUT_MS);
       const poll = setInterval(() => {
-        if (tryRender()) clearInterval(poll);
+        if (tryRender()) {
+          clearInterval(poll);
+          clearTimeout(giveUp);
+        }
       }, 150);
       return () => {
         cancelled = true;
         clearInterval(poll);
+        clearTimeout(giveUp);
         removeWidget(widgetIdRef);
       };
     }
@@ -80,6 +110,18 @@ export function TurnstileWidget({ siteKey, onToken, onError }: TurnstileWidgetPr
       removeWidget(widgetIdRef);
     };
   }, [siteKey]);
+
+  // A spent token cannot be verified twice, so every submission asks Cloudflare
+  // for a new one.
+  useEffect(() => {
+    if (resetKey === 0 || widgetIdRef.current === null) return;
+    callbacks.current.onToken(null);
+    try {
+      globalThis.turnstile?.reset?.(widgetIdRef.current);
+    } catch {
+      callbacks.current.onError();
+    }
+  }, [resetKey]);
 
   return <div ref={containerRef} data-testid="turnstile-widget" />;
 }

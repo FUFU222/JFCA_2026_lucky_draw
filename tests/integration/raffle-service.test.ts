@@ -44,6 +44,7 @@ class MemoryRepository implements RaffleRepository {
   readonly deliveries: DeliveryRecord[] = [];
   readonly completedJobs: Array<{ jobId: string; lease: string; sent: boolean; error?: string }> = [];
   readonly armedJobs: Array<{ entryId: string; kind: string; error: string }> = [];
+  readonly settledJobs: Array<{ entryId: string; kind: string }> = [];
   receiptJobAvailable = true;
   confirmFailure: Error | null = null;
   private assignedNumber: bigint | null = null;
@@ -161,6 +162,10 @@ class MemoryRepository implements RaffleRepository {
 
   async armOutboxJob(entryId: string, kind: 'VERIFICATION' | 'RECEIPT', error: string) {
     this.armedJobs.push({ entryId, kind, error });
+  }
+
+  async settleOutboxJob(entryId: string, kind: 'VERIFICATION' | 'RECEIPT') {
+    this.settledJobs.push({ entryId, kind });
   }
 }
 

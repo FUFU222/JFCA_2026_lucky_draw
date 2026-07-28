@@ -3,9 +3,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const session = vi.hoisted(() => ({ getOperatorSession: vi.fn() }));
 const queries = vi.hoisted(() => ({
   loadDashboard: vi.fn(),
-  exportEntries: vi.fn(),
+  exportEntryPages: vi.fn(),
+  countEntriesForExport: vi.fn(),
   setCampaignStatus: vi.fn(),
 }));
+
+/** The route consumes pages, so the double has to be an async generator. */
+function pagesOf(...pages: unknown[][]) {
+  return async function* () {
+    for (const page of pages) yield page;
+  };
+}
 const audit = vi.hoisted(() => ({ recordAudit: vi.fn() }));
 
 vi.mock('../../lib/security/operator-session', () => ({
@@ -27,11 +35,15 @@ beforeEach(() => {
   vi.resetAllMocks();
   session.getOperatorSession.mockResolvedValue(OPERATOR);
   queries.loadDashboard.mockResolvedValue({ campaign: { id: 'campaign-1', status: 'SCHEDULED' } });
+  queries.countEntriesForExport.mockResolvedValue(0);
+  queries.exportEntryPages.mockImplementation(pagesOf());
 });
 
 describe('CSV export', () => {
   it('returns a downloadable UTF-8 file with the entry columns', async () => {
-    queries.exportEntries.mockResolvedValue([
+    queries.countEntriesForExport.mockResolvedValue(1);
+    queries.exportEntryPages.mockImplementation(
+      pagesOf([
       {
         number: 10_000,
         email: 'person@example.com',
@@ -49,7 +61,8 @@ describe('CSV export', () => {
         region: 'Ontario',
         created_at: '2026-07-28T00:59:00.000Z',
       },
-    ]);
+      ]),
+    );
 
     const response = await exportCsv(exportRequest());
     // Read the bytes, not the text: decoding UTF-8 strips a leading BOM by
@@ -70,10 +83,13 @@ describe('CSV export', () => {
   });
 
   it('records who exported how much, and never the exported rows', async () => {
-    queries.exportEntries.mockResolvedValue([
-      { number: 10_000, email: 'person@example.com' },
-      { number: 10_001, email: 'other@example.com' },
-    ]);
+    queries.countEntriesForExport.mockResolvedValue(2);
+    queries.exportEntryPages.mockImplementation(
+      pagesOf([
+        { number: 10_000, email: 'person@example.com' },
+        { number: 10_001, email: 'other@example.com' },
+      ]),
+    );
 
     await exportCsv(exportRequest());
 
@@ -90,8 +106,6 @@ describe('CSV export', () => {
   });
 
   it('exports a header and no rows for an event with no entries', async () => {
-    queries.exportEntries.mockResolvedValue([]);
-
     const body = await (await exportCsv(exportRequest())).text();
 
     expect(body.trim().split('\r\n')).toHaveLength(1);
@@ -103,7 +117,7 @@ describe('CSV export', () => {
     const response = await exportCsv(exportRequest('no-such-event'));
 
     expect(response.status).toBe(404);
-    expect(queries.exportEntries).not.toHaveBeenCalled();
+    expect(queries.exportEntryPages).not.toHaveBeenCalled();
     expect(audit.recordAudit).not.toHaveBeenCalled();
   });
 });

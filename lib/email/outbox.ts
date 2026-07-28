@@ -5,11 +5,20 @@ export const OUTBOX_BATCH_LIMIT = 20;
 /**
  * A cron invocation is killed at the platform's function timeout. Stopping
  * before that leaves each claimed job with a recorded outcome instead of a
- * lease that has to expire before anything retries it. The caller passes the
- * budget that matches its own declared `maxDuration`; this default is a safe
- * floor for an undeclared one.
+ * lease that has to expire before anything retries it.
+ *
+ * The caller must declare a `maxDuration` of at least this budget plus
+ * {@link WORST_CASE_JOB_MS}; the default pairs with the 60 second duration the
+ * cron route declares.
  */
-export const OUTBOX_RUN_BUDGET_MS = 8_000;
+export const OUTBOX_RUN_BUDGET_MS = 45_000;
+
+/**
+ * The most a single job can cost: the mailer's own timeout plus the four
+ * database round-trips around it. The loop stops when less than this remains,
+ * so a job is never claimed that the invocation cannot finish paying for.
+ */
+export const WORST_CASE_JOB_MS = 13_000;
 const BASE_RETRY_SECONDS = 60;
 const MAX_RETRY_SECONDS = 6 * 60 * 60;
 
@@ -107,9 +116,9 @@ export class EmailOutboxProcessor {
     };
 
     for (let processed = 0; processed < limit; processed += 1) {
-      // Checked before claiming, so the run never leases a job it has no time
-      // left to deliver.
-      if (clock() >= deadline) {
+      // Checked with the worst-case job reserved, so the run never leases a job
+      // it has no time left to finish and record.
+      if (clock() + WORST_CASE_JOB_MS > deadline) {
         summary.stoppedEarly = true;
         break;
       }
@@ -149,6 +158,10 @@ export class EmailOutboxProcessor {
     }
 
     try {
+      // Completing first: this is what stops the message going out again. The
+      // delivery record is bookkeeping, and ordering it ahead would let a failed
+      // insert cost a duplicate message rather than a missing audit row.
+      await this.dependencies.repository.completeJob(job, outcome);
       await this.dependencies.repository.recordDelivery({
         entryId: job.entryId,
         kind: job.kind,
@@ -156,7 +169,6 @@ export class EmailOutboxProcessor {
         providerMessageId,
         providerError: outcome.status === 'SENT' ? null : outcome.error,
       });
-      await this.dependencies.repository.completeJob(job, outcome);
     } catch (error) {
       // The message may already be out. Leave the lease to expire rather than
       // recording an outcome we could not persist.
@@ -188,10 +200,13 @@ export class EmailOutboxProcessor {
 
     const receiptToken = this.recoverReceiptToken(context);
     if (!receiptToken) {
-      // Only a changed RECEIPT_TOKEN_SECRET can cause this. Say so plainly:
-      // the entry keeps its number, but its permanent link cannot be rebuilt.
-      throw new Error(
-        'Receipt link cannot be derived for this entry; RECEIPT_TOKEN_SECRET may have changed',
+      // Either token secret having changed, or the entry's verification token
+      // rows having been removed, makes the permanent link unreconstructable.
+      // All three are permanent, so retrying forever only buries the failures an
+      // operator can still act on. The entry keeps its number either way.
+      throw new OutboxJobUnsatisfiable(
+        'Receipt link cannot be derived for this entry; RECEIPT_TOKEN_SECRET or ' +
+          'VERIFICATION_TOKEN_SECRET may have changed since the number was issued',
       );
     }
 

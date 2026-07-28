@@ -5,6 +5,11 @@ For the operator at the venue. Everything here is done from the dashboard at
 
 ## Before doors open
 
+0. **Sign in on a second device and leave that session open.** The magic link is
+   the only way in, and Supabase rate limits those emails per hour: one link in
+   a spam folder can lock the only operator out. If it happens, entrant data can
+   still be read from the Supabase table editor.
+
 1. Sign in at `/admin/login` with your `@chairman.jp` address. The link arrives
    by email; it is the only way in.
 2. Check the overview: registration should read **Accepting entries**, and
@@ -18,22 +23,31 @@ default). At a festival, hundreds of visitors share the venue wifi and a small
 number of carrier NAT addresses, so **many visitors will appear to come from one
 IP**.
 
-- If visitors start reporting "Too many attempts", that is the per-IP limit, not
-  a fault. Raise `RAFFLE_IP_REQUEST_LIMIT` in Vercel and redeploy; the change
-  takes effect on the next request.
-- Never lower it below a few hundred for a physical event.
+- If visitors report "Too many attempts", raise `RAFFLE_IP_REQUEST_LIMIT` in
+  Vercel and redeploy. The change takes effect on the next request, and it does
+  unblock an address that is already over the limit.
+- The window is a fixed 24 hours, not a sliding one, so waiting does **not**
+  help a blocked address. Only raising the limit does.
+- The same message also appears if the database is briefly unreachable, because
+  the limiter fails closed. If raising the limit changes nothing, check Supabase
+  before raising it again.
 - The per-address limit of 5 is what actually protects a person. Leave it alone.
 
 ## Someone did not get their email
 
 1. Search their address under **Entries**. If nothing is found, they mistyped it
    — have them enter again.
-2. If the entry is `PENDING`, ask them to use "Send it again" on the page. There
-   is a two-minute wait between sends and three in total per day.
+2. If the entry is `PENDING`, ask them to use "Send it again" on the page. The
+   first submission already used one of the three daily sends, so they have two
+   resends, with a two-minute wait between them.
 3. Check **Email delivery failures** on the overview. A message there names the
    provider's reason.
-4. "Emails waiting to send" above zero and not falling means the retry worker is
-   not running. Check the Vercel cron job.
+4. "Emails waiting to send" is briefly non-zero during normal traffic — every
+   confirmation queues a receipt that is sent immediately. A number that climbs
+   and does not fall means either the worker is not running (check the Vercel
+   cron job and that `CRON_SECRET` is set for Production) or it is at its cap of
+   20 messages a minute, which is the more likely cause after a provider
+   incident.
 
 ## Someone lost their number
 

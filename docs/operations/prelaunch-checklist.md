@@ -13,6 +13,18 @@ printed, the URL it points at cannot be changed.
       `pnpm exec supabase db push`. Confirm all four migrations applied.
 - [ ] Insert the campaign (see the SQL in [README.md](../../README.md)). It is
       created `DRAFT` with no dates on purpose.
+- [ ] **Auth → Providers → Email: turn "Confirm email" ON.** With it off, anyone
+      holding the public anon key — which ships in the browser bundle — can call
+      `signUp` with any address they type, including `anything@chairman.jp`, and
+      receive an immediately-confirmed session. That is full access to every
+      entrant's personal data and to pause/close. Verified by exploit against a
+      default project. The application also refuses a session that never came
+      through the emailed link, but do not rely on one layer.
+- [ ] After enabling it, confirm the bypass is closed:
+      `curl -s -X POST "$SUPABASE_URL/auth/v1/signup" -H "apikey: $ANON_KEY" \
+        -H 'content-type: application/json' \
+        -d '{"email":"probe@chairman.jp","password":"aVeryLongTestPassword1!"}'`
+      must **not** return an `access_token`.
 - [ ] Auth → URL configuration: add `https://luckydraw.livapon.com/auth/callback`
       to the redirect allow list. Without it the operator sign-in link silently
       lands on the project's default site URL.
@@ -58,6 +70,8 @@ printed, the URL it points at cannot be changed.
 | `VERIFICATION_TOKEN_SECRET` | long random value |
 | `CRON_SECRET` | long random value |
 | `MAIL_DELIVERY_MODE` | `send` |
+| `RAFFLE_IP_REQUEST_LIMIT` | `100000` — see the venue note below |
+| `RAFFLE_EMAIL_REQUEST_LIMIT` | leave unset (defaults to 5) |
 
 - [ ] **Confirm the plan supports a per-minute cron.** `vercel.json` asks for
       `* * * * *`. On the Hobby plan cron jobs run at most **once a day**, which
@@ -68,8 +82,13 @@ printed, the URL it points at cannot be changed.
       Without `CRON_SECRET` it receives 401 and no retry will ever run.
 - [ ] The worker declares `maxDuration = 30`. Confirm the plan allows it; the
       deploy fails loudly if not.
-- [ ] Decide `RAFFLE_IP_REQUEST_LIMIT`. The default is 500 per address per day.
-      **Read the venue note in the on-site runbook before lowering it.**
+- [ ] **Set `RAFFLE_IP_REQUEST_LIMIT` high — 100000.** The window is a fixed 24
+      hours, not a sliding one, so a venue wifi or carrier NAT address that
+      crosses the limit stays blocked for the rest of the event. The default of
+      500 is measured to be reached within the first hour at this scale. The
+      per-address limit of 5 is the one that protects a person; leave it alone.
+- [ ] Run the load test **without** raising the limit further, so it measures
+      what the venue will actually experience.
 
 ## 5. Legal and content
 
@@ -82,8 +101,10 @@ printed, the URL it points at cannot be changed.
 
 ## 6. Event schedule
 
-Set from SQL or the Supabase table editor. No deploy is needed and there is no
-prize data in the application at all.
+Set from SQL, **not** the table editor: a bare timestamp typed there is read as
+UTC, which would open registration at 06:00 and close it at 12:30 local — in the
+middle of the event. Always write the offset explicitly. No deploy is needed and
+there is no prize data in the application at all.
 
 ```sql
 update public.campaigns

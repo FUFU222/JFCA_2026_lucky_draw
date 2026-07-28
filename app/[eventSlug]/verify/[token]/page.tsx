@@ -21,14 +21,14 @@ export default async function VerifyPage({
 
   const t = messagesFor(locale).verify;
   // A GET only reads. The number is issued by the action on this page.
-  const state = await verificationLinkState(eventSlug, decodeURIComponent(token));
+  const state = await verificationLinkState(eventSlug, token);
 
   return (
     <PageShell locale={locale}>
       {state === 'usable' ? (
         <VerificationConfirmation
           eventSlug={eventSlug}
-          token={decodeURIComponent(token)}
+          token={token}
           locale={locale}
         />
       ) : (

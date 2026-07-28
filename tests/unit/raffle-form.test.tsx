@@ -7,11 +7,18 @@ import { countryOptions } from '../../lib/i18n/countries';
 const CAPTCHA_TOKEN = 'turnstile-test-token';
 
 function stubTurnstile({ solve = true }: { solve?: boolean } = {}) {
+  let issue: ((token: string) => void) | null = null;
   globalThis.turnstile = {
     render: (_element, options) => {
-      if (solve) (options.callback as (token: string) => void)(CAPTCHA_TOKEN);
+      issue = options.callback as (token: string) => void;
+      if (solve) issue(CAPTCHA_TOKEN);
       else (options['error-callback'] as () => void)();
       return 'widget-1';
+    },
+    // Cloudflare hands back a new token after a reset; the form depends on it,
+    // because a spent one cannot be verified twice.
+    reset: () => {
+      if (solve) issue?.(CAPTCHA_TOKEN);
     },
   };
 }

@@ -8,8 +8,8 @@
  * The per-IP limit is a coarse anti-automation net, and it has to be generous.
  * At a festival, hundreds of visitors share the venue's wifi and a handful of
  * carrier NAT addresses, so a low ceiling would stop real entrants rather than
- * bots. Both are configurable so an operator can raise them from the Vercel
- * dashboard during the event without a deploy.
+ * bots. Both are configurable so an operator can raise them during the event by
+ * changing an environment variable and redeploying, rather than editing code.
  */
 export const RATE_LIMIT_WINDOW_SECONDS = 24 * 60 * 60;
 

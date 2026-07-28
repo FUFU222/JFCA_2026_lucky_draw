@@ -9,7 +9,12 @@ const LINK_INVALID = { ok: false, error: 'verification_link_invalid' } as const;
  * Issuing a number is deliberately a POST: opening the emailed link only
  * renders a confirmation page, so a mail scanner that follows the URL cannot
  * consume the token or claim a number.
+ *
+ * The duration is declared rather than left to the platform default, which is
+ * short enough to kill this part-way through issuing a number.
  */
+export const maxDuration = 30;
+
 export async function POST(request: Request, context: { params: Promise<{ eventSlug: string }> }) {
   const body = await readJsonObject(request);
   if (!body) return NextResponse.json(LINK_INVALID, { status: 400 });

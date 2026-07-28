@@ -134,16 +134,49 @@ export async function searchEntries({
   return (data ?? []) as EntrySummary[];
 }
 
-export async function exportEntries(campaignId: string): Promise<ExportableEntry[]> {
-  const { data, error } = await createServiceRoleClient()
+const EXPORT_COLUMNS =
+  'number, email, state, verified_at, locale, terms_version, terms_consented_at, first_name, last_name, phone, gender, date_of_birth, country, region, created_at';
+const EXPORT_PAGE_SIZE = 500;
+
+/**
+ * Yields the entries a page at a time.
+ *
+ * PostgREST caps a single response at its `max_rows` setting — 1000 by default
+ * — and returns the truncated set with a 200 and no warning, so an unpaginated
+ * export of a 30,000-entry event silently produced a file containing the first
+ * thousand. The page size is also small enough that the caller can stream the
+ * result instead of buffering a file past the platform's response limit.
+ */
+export async function* exportEntryPages(
+  campaignId: string,
+  pageSize = EXPORT_PAGE_SIZE,
+): AsyncGenerator<ExportableEntry[]> {
+  const client = createServiceRoleClient();
+
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await client
+      .from('raffle_entries')
+      .select(EXPORT_COLUMNS)
+      .eq('campaign_id', campaignId)
+      // Ordered by a unique column so pages cannot overlap or skip a row.
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true })
+      .range(offset, offset + pageSize - 1);
+    if (error) throw error;
+
+    const page = (data ?? []) as ExportableEntry[];
+    if (page.length > 0) yield page;
+    if (page.length < pageSize) return;
+  }
+}
+
+export async function countEntriesForExport(campaignId: string): Promise<number> {
+  const { count, error } = await createServiceRoleClient()
     .from('raffle_entries')
-    .select(
-      'number, email, state, verified_at, locale, terms_version, terms_consented_at, first_name, last_name, phone, gender, date_of_birth, country, region, created_at',
-    )
-    .eq('campaign_id', campaignId)
-    .order('number', { ascending: true, nullsFirst: false });
+    .select('id', { count: 'exact', head: true })
+    .eq('campaign_id', campaignId);
   if (error) throw error;
-  return (data ?? []) as ExportableEntry[];
+  return count ?? 0;
 }
 
 export async function setCampaignStatus(

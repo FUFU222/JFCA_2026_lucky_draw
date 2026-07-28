@@ -160,7 +160,7 @@ describe('EmailOutboxProcessor', () => {
 
     const summary = await buildProcessor(repository, mailer).process();
 
-    expect(summary).toEqual({ claimed: 2, sent: 0, failed: 2, cancelled: 0, stoppedEarly: false });
+    expect(summary).toEqual({ claimed: 2, sent: 0, failed: 0, cancelled: 2, stoppedEarly: false });
     expect(mailer.receipts).toHaveLength(0);
     expect(repository.deliveries[0]).toMatchObject({
       status: 'FAILED',
@@ -216,11 +216,12 @@ describe('EmailOutboxProcessor', () => {
       mailer,
       verificationTokenSecret: VERIFICATION_SECRET,
       receiptTokenSecret: RECEIPT_SECRET,
-      // Each claim costs 4 seconds of the 10-second budget.
-      now: () => (clock += 4_000) - 4_000,
+      // Each claim costs 12 seconds of the 40-second budget, and the loop keeps
+      // one worst-case job (13s) in reserve.
+      now: () => (clock += 12_000) - 12_000,
     });
 
-    const summary = await processor.process(10, 10_000);
+    const summary = await processor.process(10, 40_000);
 
     expect(summary.stoppedEarly).toBe(true);
     // Two fit inside the budget; the third was never leased, so it stays
@@ -229,17 +230,20 @@ describe('EmailOutboxProcessor', () => {
     expect(repository.completed.map((entry) => entry.id)).toEqual(['a', 'b']);
   });
 
-  it('leaves the lease to expire when the outcome cannot be recorded', async () => {
+  it('does not send again when only the delivery record could not be written', async () => {
     const repository = new MemoryOutboxRepository([job()]);
     repository.bookkeepingFailure = new Error('database unavailable');
     const mailer = new RecordingMailer();
 
     const summary = await buildProcessor(repository, mailer).process();
 
-    // The message went out, so it is reported as sent and nothing is written
-    // that would contradict that.
+    // The message went out and the job is closed. Losing the audit row costs an
+    // audit row; losing the completion would cost the visitor a second copy of
+    // their number.
     expect(summary).toEqual({ claimed: 1, sent: 1, failed: 0, cancelled: 0, stoppedEarly: false });
-    expect(repository.completed).toHaveLength(0);
+    expect(mailer.receipts).toHaveLength(1);
+    expect(repository.completed).toEqual([{ id: 'job-1', status: 'SENT' }]);
+    expect(repository.deliveries).toHaveLength(0);
   });
 
   it('refuses to start without both token secrets', () => {

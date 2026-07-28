@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+
+import { currentLocale } from '../lib/i18n/server-locale';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -6,11 +8,13 @@ export const metadata: Metadata = {
   description: 'JFCA 2026 lucky draw registration',
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  // English is the default public language. Task 6 makes this follow the
-  // locale the visitor selects.
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  // A Japanese page inside `lang="en"` is read aloud by an English speech
+  // synthesizer, and defeats CJK font selection.
+  const locale = await currentLocale();
+
   return (
-    <html lang="en">
+    <html lang={locale}>
       <body>{children}</body>
     </html>
   );

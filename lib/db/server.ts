@@ -234,12 +234,26 @@ export class SupabaseRaffleRepository implements RaffleRepository {
   }
 
   async armOutboxJob(entryId: string, kind: 'VERIFICATION' | 'RECEIPT', error: string): Promise<void> {
-    const { error: rpcError } = await this.client.rpc('arm_email_outbox_job', {
+    const { data, error: rpcError } = await this.client.rpc('arm_email_outbox_job', {
       p_entry_id: entryId,
       p_kind: kind,
       p_error: error,
     });
     if (rpcError) throw rpcError;
+    // False means another worker holds a live lease on this entry's job, so the
+    // message is already someone's responsibility. Anything else would be a
+    // message quietly dropped, which is what this call exists to prevent.
+    if (data !== true) {
+      console.warn('Outbox job for entry %s (%s) was already leased', entryId, kind);
+    }
+  }
+
+  async settleOutboxJob(entryId: string, kind: 'VERIFICATION' | 'RECEIPT'): Promise<void> {
+    const { error } = await this.client.rpc('settle_email_outbox_job', {
+      p_entry_id: entryId,
+      p_kind: kind,
+    });
+    if (error) throw error;
   }
 
   async completeReceiptJob(job: ReceiptJob, result: { sent: boolean; error?: string }): Promise<void> {

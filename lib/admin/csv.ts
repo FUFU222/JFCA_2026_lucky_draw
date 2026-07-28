@@ -55,3 +55,13 @@ export function entriesToCsv(entries: readonly ExportableEntry[]): string {
     entries.map((entry) => ENTRY_COLUMNS.map((column) => entry[column])),
   );
 }
+
+/** Header line, byte order mark included, for a streamed export. */
+export function entryCsvHeader(): string {
+  return `${UTF8_BOM}${ENTRY_COLUMNS.map(field).join(',')}\r\n`;
+}
+
+/** One record line, for a streamed export. */
+export function entryCsvRow(entry: ExportableEntry): string {
+  return `${ENTRY_COLUMNS.map((column) => field(entry[column])).join(',')}\r\n`;
+}

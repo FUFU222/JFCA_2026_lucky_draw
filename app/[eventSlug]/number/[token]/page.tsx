@@ -20,7 +20,10 @@ export default async function NumberPage({
   const [campaign, locale] = await Promise.all([findCampaign(eventSlug), currentLocale()]);
   if (!campaign) notFound();
 
-  const receipt = await findReceipt(eventSlug, decodeURIComponent(token));
+  const receipt = await findReceipt(eventSlug, token);
+  // A missing receipt is a real 404: a soft one invites indexing of a page
+  // whose URL is a bearer token.
+  if (!receipt) notFound();
   const t = messagesFor(locale).receipt;
 
   return (

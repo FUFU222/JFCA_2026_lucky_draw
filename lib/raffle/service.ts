@@ -99,6 +99,8 @@ export interface RaffleRepository {
    * attempt, so a provider outage must not cost a visitor one of their three.
    */
   armOutboxJob(entryId: string, kind: 'VERIFICATION' | 'RECEIPT', error: string): Promise<void>;
+  /** Marks a queued copy as delivered once an inline send got there first. */
+  settleOutboxJob(entryId: string, kind: 'VERIFICATION' | 'RECEIPT'): Promise<void>;
 }
 
 export interface RaffleMailer {
@@ -358,6 +360,9 @@ export class RaffleService {
         token: deriveVerificationToken(token.id, this.dependencies.verificationTokenSecret),
         locale: entry.locale,
       });
+      // A copy an earlier failure queued is now redundant; leaving it would send
+      // the same link a second time.
+      await this.dependencies.repository.settleOutboxJob(entry.id, 'VERIFICATION');
       await this.dependencies.repository.recordDelivery({
         entryId: entry.id,
         kind: 'VERIFICATION',
@@ -366,15 +371,16 @@ export class RaffleService {
       });
     } catch (error) {
       const message = messageOf(error);
+      // The allowance is already spent, so the message must still arrive.
+      // Queuing it comes first: the delivery record is bookkeeping, and letting
+      // a failed insert skip this step is how a message gets lost outright.
+      await this.dependencies.repository.armOutboxJob(entry.id, 'VERIFICATION', message);
       await this.dependencies.repository.recordDelivery({
         entryId: entry.id,
         kind: 'VERIFICATION',
         status: 'FAILED',
         providerError: message,
       });
-      // The allowance is already spent, so the message must still arrive. Hand
-      // it to the retry worker instead of losing it.
-      await this.dependencies.repository.armOutboxJob(entry.id, 'VERIFICATION', message);
     }
   }
 
@@ -409,6 +415,13 @@ export class RaffleService {
         deliveryError = messageOf(error);
       }
 
+      // Completing the job comes first. It is what stops the message being sent
+      // again; the delivery record is only bookkeeping, and ordering it ahead
+      // would let a failed insert cost a duplicate receipt.
+      await this.dependencies.repository.completeReceiptJob(
+        job,
+        deliveryError === null ? { sent: true } : { sent: false, error: deliveryError },
+      );
       await this.dependencies.repository.recordDelivery({
         entryId,
         kind: 'RECEIPT',
@@ -416,10 +429,6 @@ export class RaffleService {
         providerMessageId,
         providerError: deliveryError,
       });
-      await this.dependencies.repository.completeReceiptJob(
-        job,
-        deliveryError === null ? { sent: true } : { sent: false, error: deliveryError },
-      );
     } catch (error) {
       this.dependencies.onDeliveryError?.(error);
     }

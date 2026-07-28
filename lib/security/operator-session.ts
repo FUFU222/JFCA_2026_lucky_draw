@@ -39,9 +39,16 @@ export async function createAuthClient() {
 }
 
 /**
- * The domain is checked here as well as before the magic link is requested.
- * A link mailed to an operator could otherwise be replayed by anyone who
- * obtained a session another way.
+ * Three things must all hold, because the email domain on its own is not a
+ * credential.
+ *
+ * Supabase Auth will issue a session to anyone who calls `signUp` with the
+ * public anon key, for any address they type — including one at the operator
+ * domain. Requiring email confirmation in the project settings closes that,
+ * but a project setting is not something this code can see, so the last check
+ * does not depend on it: the session must belong to a user who has completed
+ * the emailed sign-in link through `/auth/callback`, which is the only place
+ * an `ADMIN_LOGIN` record is written. A self-registered account has none.
  */
 export async function getOperatorSession(): Promise<OperatorSession | null> {
   const { data, error } = await (await createAuthClient()).auth.getUser();
@@ -49,8 +56,24 @@ export async function getOperatorSession(): Promise<OperatorSession | null> {
 
   const email = normalizeOperatorEmail(data.user.email);
   if (!isChairmanOperator(email)) return null;
+  if (!data.user.email_confirmed_at) return null;
+  if (!(await hasCompletedMagicLinkSignIn(data.user.id))) return null;
 
   return { userId: data.user.id, email };
+}
+
+async function hasCompletedMagicLinkSignIn(userId: string): Promise<boolean> {
+  const { createServiceRoleClient } = await import('../db/server');
+  const { data, error } = await createServiceRoleClient()
+    .from('admin_audit_logs')
+    .select('id')
+    .eq('admin_user_id', userId)
+    .eq('action', 'ADMIN_LOGIN')
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data !== null;
 }
 
 /** For pages: sends anyone who is not an operator to the login screen. */
