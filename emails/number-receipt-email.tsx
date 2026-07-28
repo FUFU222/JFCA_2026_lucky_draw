@@ -1,6 +1,7 @@
-import { Body, Container, Head, Heading, Html, Link, Preview, Section, Text } from 'react-email';
+import { Body, Container, Head, Heading, Html, Img, Link, Preview, Section, Text } from 'react-email';
 
 import { emailStyles, type EmailLocale } from './styles';
+import { LOGO_ALT, logoUrl } from './logo';
 
 const copy = {
   en: {
@@ -51,7 +52,7 @@ export function NumberReceiptEmail({
       <Preview>{t.preview}</Preview>
       <Body style={emailStyles.body}>
         <Container style={emailStyles.container}>
-          <Text style={emailStyles.brand}>LIVAPON</Text>
+          <Img src={logoUrl()} alt={LOGO_ALT} width="140" style={emailStyles.logo} />
           <Heading style={emailStyles.heading}>{t.heading}</Heading>
 
           {/* The number is the entire point of this message, so it is the one

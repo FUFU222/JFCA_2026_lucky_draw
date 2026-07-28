@@ -1,6 +1,7 @@
-import { Body, Container, Head, Heading, Html, Link, Preview, Section, Text } from 'react-email';
+import { Body, Container, Head, Heading, Html, Img, Link, Preview, Section, Text } from 'react-email';
 
 import { emailStyles, type EmailLocale } from './styles';
+import { LOGO_ALT, logoUrl } from './logo';
 
 const copy = {
   en: {
@@ -47,7 +48,7 @@ export function VerificationEmail({ locale, verificationUrl, supportEmail }: Ver
       <Preview>{t.preview}</Preview>
       <Body style={emailStyles.body}>
         <Container style={emailStyles.container}>
-          <Text style={emailStyles.brand}>LIVAPON</Text>
+          <Img src={logoUrl()} alt={LOGO_ALT} width="140" style={emailStyles.logo} />
           <Heading style={emailStyles.heading}>{t.heading}</Heading>
           <Text style={emailStyles.paragraph}>{t.intro}</Text>
 

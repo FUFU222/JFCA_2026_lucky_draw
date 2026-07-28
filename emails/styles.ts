@@ -29,13 +29,9 @@ export const emailStyles = {
     maxWidth: '560px',
     padding: '32px 28px',
   },
-  brand: {
-    color: INK,
-    fontSize: '14px',
-    fontWeight: 700,
-    letterSpacing: '0.16em',
+  logo: {
+    height: 'auto',
     margin: '0 0 24px',
-    textTransform: 'uppercase',
   },
   heading: {
     color: INK,
