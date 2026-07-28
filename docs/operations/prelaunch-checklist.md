@@ -150,7 +150,14 @@ be issued after the draw has begun.
 - [ ] A resend requested, and the cooldown message seen.
 - [ ] Operator sign-in with a `@chairman.jp` address, and an address outside the
       domain refused.
-- [ ] Pause and resume exercised, and both seen in the audit log.
+- [ ] Pause, resume, and close each exercised, and all three seen in the audit
+      log. Close is one-way from the dashboard, so exercise it last, on a
+      throwaway campaign or right at the true end of this checklist.
+- [ ] Test mode walked end to end: open **Open in test mode** from the
+      dashboard, submit and confirm a real entry, and confirm the number
+      lands at 900000001+ and never appears in the verified/pending counts or
+      the CSV export — only in Recent entries and Entries search, badged
+      `TEST`.
 - [ ] A CSV exported and opened in Excel with Japanese names intact.
 - [ ] `info@chairman.jp` reaches a monitored mailbox.
 

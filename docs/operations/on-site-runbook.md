@@ -62,14 +62,30 @@ find it:
 There is deliberately no way to resend a receipt email and no way to reissue a
 number.
 
-## Stopping entries in a hurry
+## Starting, pausing, and closing entries
 
-Use **Pause registration** on the overview. It asks first, and Cancel is the
-default. Pausing stops new entries immediately. It does **not** stop someone who
-already holds a link from confirming and getting their number, which is
-deliberate: they entered while it was open.
+The overview shows only the buttons that make sense for the current state:
 
-Resume the same way. Both actions are recorded against your account.
+- **Start entries now** appears while the campaign is `DRAFT`. It is greyed
+  out with an explanation if the draw time has not been set yet (see
+  [prelaunch-checklist.md](prelaunch-checklist.md) section 6) — without one,
+  starting would silently do nothing.
+- **Pause registration** stops new entries immediately but does **not** stop
+  someone who already holds a link from confirming and getting their number,
+  which is deliberate: they entered while it was open. **Resume registration**
+  undoes it, and visitors can enter again immediately.
+- **Close entries** is different from pausing: it is the end of the event,
+  refuses confirmation as well as new entries, and cannot be undone from the
+  dashboard. Use it only when entries are genuinely finished — the closing
+  step in [After the event](#after-the-event) below.
+
+Every one of these asks first, Cancel is the default, and all four are
+recorded against your account.
+
+The opening and draw times themselves (`opens_at`, `draw_starts_at`) are still
+set from SQL only, never from this dashboard — see
+[prelaunch-checklist.md](prelaunch-checklist.md) section 6. The buttons above
+are for changing your mind on the day, not for the original schedule.
 
 ## What this service will not do
 
@@ -93,7 +109,7 @@ recorded with who ran it and how many rows — never the rows themselves.
 
 ## After the event
 
-1. Set the campaign to `CLOSED`.
+1. Use **Close entries** on the overview.
 2. Confirm "Emails waiting to send" has reached zero. Do not go further until it
    has — a receipt still queued has not reached its owner yet.
 3. Export the final CSV and store it wherever entrant data belongs.
