@@ -181,11 +181,40 @@ export async function countEntriesForExport(campaignId: string): Promise<number>
 
 export async function setCampaignStatus(
   campaignId: string,
-  status: 'SCHEDULED' | 'PAUSED',
+  status: 'SCHEDULED' | 'PAUSED' | 'CLOSED',
 ): Promise<void> {
   const { error } = await createServiceRoleClient()
     .from('campaigns')
     .update({ status })
+    .eq('id', campaignId);
+  if (error) throw error;
+}
+
+/**
+ * Used only by the "start entries now" admin action. Opens registration
+ * immediately by setting `status` to `SCHEDULED` and, only if `opens_at` is
+ * unset or still in the future, bringing it forward to now — an `opens_at`
+ * already in the past is left untouched so restarting after a pause does not
+ * quietly rewrite when the campaign "really" opened. The caller is
+ * responsible for confirming `draw_starts_at` is already set: without it,
+ * `isRegistrationOpen()` stays false no matter what this does.
+ */
+export async function startRegistrationNow(
+  campaignId: string,
+  currentOpensAt: string | null,
+  now: Date = new Date(),
+): Promise<void> {
+  const opensAtIsFuture =
+    currentOpensAt !== null && new Date(currentOpensAt).getTime() > now.getTime();
+
+  const updates: { status: 'SCHEDULED'; opens_at?: string } = { status: 'SCHEDULED' };
+  if (currentOpensAt === null || opensAtIsFuture) {
+    updates.opens_at = now.toISOString();
+  }
+
+  const { error } = await createServiceRoleClient()
+    .from('campaigns')
+    .update(updates)
     .eq('id', campaignId);
   if (error) throw error;
 }

@@ -6,7 +6,9 @@ export type AuditAction =
   | 'ADMIN_LOGIN'
   | 'EXPORT_CSV'
   | 'PAUSE_REGISTRATION'
-  | 'RESUME_REGISTRATION';
+  | 'RESUME_REGISTRATION'
+  | 'START_REGISTRATION'
+  | 'CLOSE_REGISTRATION';
 
 export interface AuditEntry {
   action: AuditAction;

@@ -52,7 +52,7 @@ export default async function AdminDashboard() {
             <dd className="font-mono text-neutral-900">{campaign.terms_version}</dd>
           </div>
         </dl>
-        <CampaignControls status={campaign.status} />
+        <CampaignControls status={campaign.status} drawStartsAt={campaign.draw_starts_at} />
       </section>
 
       <section className="mt-10 space-y-3">
