@@ -2,6 +2,12 @@ import { deriveReceiptToken, deriveVerificationToken, hashToken } from '../raffl
 import type { DeliveryRecord, RaffleMailer } from '../raffle/service';
 
 export const OUTBOX_BATCH_LIMIT = 20;
+/**
+ * A cron invocation is killed at the platform's function timeout. Stopping
+ * before that leaves each claimed job with a recorded outcome instead of a
+ * lease that has to expire before anything retries it.
+ */
+export const OUTBOX_RUN_BUDGET_MS = 25_000;
 const BASE_RETRY_SECONDS = 60;
 const MAX_RETRY_SECONDS = 6 * 60 * 60;
 
@@ -36,6 +42,8 @@ export interface OutboxRunSummary {
   claimed: number;
   sent: number;
   failed: number;
+  /** True when the budget ended the run before the batch limit was reached. */
+  stoppedEarly: boolean;
 }
 
 /**
@@ -55,6 +63,7 @@ export class EmailOutboxProcessor {
       verificationTokenSecret: string;
       receiptTokenSecret: string;
       onError?: (error: unknown) => void;
+      now?: () => number;
     },
   ) {
     if (!dependencies.verificationTokenSecret || !dependencies.receiptTokenSecret) {
@@ -62,10 +71,22 @@ export class EmailOutboxProcessor {
     }
   }
 
-  async process(limit = OUTBOX_BATCH_LIMIT): Promise<OutboxRunSummary> {
-    const summary: OutboxRunSummary = { claimed: 0, sent: 0, failed: 0 };
+  async process(
+    limit = OUTBOX_BATCH_LIMIT,
+    budgetMs = OUTBOX_RUN_BUDGET_MS,
+  ): Promise<OutboxRunSummary> {
+    const clock = this.dependencies.now ?? (() => Date.now());
+    const deadline = clock() + budgetMs;
+    const summary: OutboxRunSummary = { claimed: 0, sent: 0, failed: 0, stoppedEarly: false };
 
     for (let processed = 0; processed < limit; processed += 1) {
+      // Checked before claiming, so the run never leases a job it has no time
+      // left to deliver.
+      if (clock() >= deadline) {
+        summary.stoppedEarly = true;
+        break;
+      }
+
       const job = await this.dependencies.repository.claimNextJob();
       if (!job) break;
       summary.claimed += 1;

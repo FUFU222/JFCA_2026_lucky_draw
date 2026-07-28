@@ -117,7 +117,7 @@ describe('EmailOutboxProcessor', () => {
 
     const summary = await buildProcessor(repository, mailer).process();
 
-    expect(summary).toEqual({ claimed: 1, sent: 1, failed: 0 });
+    expect(summary).toEqual({ claimed: 1, sent: 1, failed: 0, stoppedEarly: false });
     expect(mailer.receipts).toHaveLength(1);
     expect(mailer.receipts[0].receiptToken).toBe(receiptTokenFor(ACTIVE_TOKEN_ID));
     expect(mailer.receipts[0].number).toBe(BigInt(10_000));
@@ -159,7 +159,7 @@ describe('EmailOutboxProcessor', () => {
 
     const summary = await buildProcessor(repository, mailer).process();
 
-    expect(summary).toEqual({ claimed: 2, sent: 0, failed: 2 });
+    expect(summary).toEqual({ claimed: 2, sent: 0, failed: 2, stoppedEarly: false });
     expect(mailer.receipts).toHaveLength(0);
     expect(repository.deliveries[0]).toMatchObject({
       status: 'FAILED',
@@ -176,7 +176,7 @@ describe('EmailOutboxProcessor', () => {
 
     const summary = await buildProcessor(repository, mailer).process();
 
-    expect(summary).toEqual({ claimed: 1, sent: 0, failed: 1 });
+    expect(summary).toEqual({ claimed: 1, sent: 0, failed: 1, stoppedEarly: false });
     expect(mailer.verification).toHaveLength(0);
     expect(repository.completed[0]).toMatchObject({ sent: false });
   });
@@ -188,7 +188,7 @@ describe('EmailOutboxProcessor', () => {
 
     const summary = await buildProcessor(repository, mailer).process();
 
-    expect(summary).toEqual({ claimed: 1, sent: 0, failed: 1 });
+    expect(summary).toEqual({ claimed: 1, sent: 0, failed: 1, stoppedEarly: false });
     expect(repository.completed).toEqual([
       { id: 'job-1', sent: false, error: 'provider unavailable', retrySeconds: 480 },
     ]);
@@ -204,6 +204,28 @@ describe('EmailOutboxProcessor', () => {
     expect(repository.completed.map((entry) => entry.id)).toEqual(['a', 'b']);
   });
 
+  it('stops before the run budget rather than leasing work it cannot finish', async () => {
+    const repository = new MemoryOutboxRepository([job({ id: 'a' }), job({ id: 'b' }), job({ id: 'c' })]);
+    const mailer = new RecordingMailer();
+    let clock = 0;
+    const processor = new EmailOutboxProcessor({
+      repository,
+      mailer,
+      verificationTokenSecret: VERIFICATION_SECRET,
+      receiptTokenSecret: RECEIPT_SECRET,
+      // Each claim costs 4 seconds of the 10-second budget.
+      now: () => (clock += 4_000) - 4_000,
+    });
+
+    const summary = await processor.process(10, 10_000);
+
+    expect(summary.stoppedEarly).toBe(true);
+    // Two fit inside the budget; the third was never leased, so it stays
+    // claimable by the next run instead of waiting out an expired lease.
+    expect(summary.claimed).toBe(2);
+    expect(repository.completed.map((entry) => entry.id)).toEqual(['a', 'b']);
+  });
+
   it('leaves the lease to expire when the outcome cannot be recorded', async () => {
     const repository = new MemoryOutboxRepository([job()]);
     repository.bookkeepingFailure = new Error('database unavailable');
@@ -213,7 +235,7 @@ describe('EmailOutboxProcessor', () => {
 
     // The message went out, so it is reported as sent and nothing is written
     // that would contradict that.
-    expect(summary).toEqual({ claimed: 1, sent: 1, failed: 0 });
+    expect(summary).toEqual({ claimed: 1, sent: 1, failed: 0, stoppedEarly: false });
     expect(repository.completed).toHaveLength(0);
   });
 

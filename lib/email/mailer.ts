@@ -24,14 +24,23 @@ export interface LoggedRaffleEmail {
  * provider. Staging and load tests use this so a run against 30k addresses
  * cannot send a single real message.
  */
+/** A load test can drive this for hours; the recent-message buffer is bounded. */
+const LOG_HISTORY_LIMIT = 100;
+
 export class LoggingRaffleMailer implements RaffleMailer {
   readonly sent: LoggedRaffleEmail[] = [];
+  private count = 0;
 
   constructor(
     private readonly appUrl = process.env.NEXT_PUBLIC_APP_URL ?? '',
     private readonly log: (message: LoggedRaffleEmail) => void = (message) =>
       console.info('[mail:log] %s -> %s (%s)', message.kind, message.to, message.subject),
   ) {}
+
+  /** Total messages this mailer has accepted, including ones no longer buffered. */
+  get deliveredCount(): number {
+    return this.count;
+  }
 
   async sendVerification(input: {
     eventSlug: string;
@@ -66,9 +75,11 @@ export class LoggingRaffleMailer implements RaffleMailer {
   }
 
   private record(message: LoggedRaffleEmail): { id: string } {
+    this.count += 1;
     this.sent.push(message);
+    if (this.sent.length > LOG_HISTORY_LIMIT) this.sent.shift();
     this.log(message);
-    return { id: `log-${this.sent.length}` };
+    return { id: `log-${this.count}` };
   }
 }
 
