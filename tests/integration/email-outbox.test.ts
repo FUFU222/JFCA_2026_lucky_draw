@@ -5,6 +5,7 @@ import {
   retryDelaySeconds,
   type OutboxEntryContext,
   type OutboxJob,
+  type OutboxOutcome,
   type OutboxRepository,
 } from '../../lib/email/outbox';
 import { deriveReceiptToken, deriveVerificationToken, hashToken } from '../../lib/raffle/tokens';
@@ -36,7 +37,7 @@ function context(overrides: Partial<OutboxEntryContext> = {}): OutboxEntryContex
 
 class MemoryOutboxRepository implements OutboxRepository {
   readonly deliveries: DeliveryRecord[] = [];
-  readonly completed: Array<{ id: string; sent: boolean; error?: string; retrySeconds: number }> = [];
+  readonly completed: Array<{ id: string } & OutboxOutcome> = [];
   bookkeepingFailure: Error | null = null;
 
   constructor(
@@ -57,7 +58,7 @@ class MemoryOutboxRepository implements OutboxRepository {
     this.deliveries.push(delivery);
   }
 
-  async completeJob(job: OutboxJob, result: { sent: boolean; error?: string; retrySeconds: number }) {
+  async completeJob(job: OutboxJob, result: OutboxOutcome) {
     this.completed.push({ id: job.id, ...result });
   }
 }
@@ -117,7 +118,7 @@ describe('EmailOutboxProcessor', () => {
 
     const summary = await buildProcessor(repository, mailer).process();
 
-    expect(summary).toEqual({ claimed: 1, sent: 1, failed: 0, stoppedEarly: false });
+    expect(summary).toEqual({ claimed: 1, sent: 1, failed: 0, cancelled: 0, stoppedEarly: false });
     expect(mailer.receipts).toHaveLength(1);
     expect(mailer.receipts[0].receiptToken).toBe(receiptTokenFor(ACTIVE_TOKEN_ID));
     expect(mailer.receipts[0].number).toBe(BigInt(10_000));
@@ -130,7 +131,7 @@ describe('EmailOutboxProcessor', () => {
         providerError: null,
       },
     ]);
-    expect(repository.completed).toEqual([{ id: 'job-1', sent: true, error: undefined, retrySeconds: 60 }]);
+    expect(repository.completed).toEqual([{ id: 'job-1', status: 'SENT' }]);
   });
 
   it('resends the same verification link the entry already has', async () => {
@@ -159,7 +160,7 @@ describe('EmailOutboxProcessor', () => {
 
     const summary = await buildProcessor(repository, mailer).process();
 
-    expect(summary).toEqual({ claimed: 2, sent: 0, failed: 2, stoppedEarly: false });
+    expect(summary).toEqual({ claimed: 2, sent: 0, failed: 2, cancelled: 0, stoppedEarly: false });
     expect(mailer.receipts).toHaveLength(0);
     expect(repository.deliveries[0]).toMatchObject({
       status: 'FAILED',
@@ -176,9 +177,11 @@ describe('EmailOutboxProcessor', () => {
 
     const summary = await buildProcessor(repository, mailer).process();
 
-    expect(summary).toEqual({ claimed: 1, sent: 0, failed: 1, stoppedEarly: false });
+    // No retry could ever deliver this, so it is retired instead of failing
+    // every six hours forever.
+    expect(summary).toEqual({ claimed: 1, sent: 0, failed: 0, cancelled: 1, stoppedEarly: false });
     expect(mailer.verification).toHaveLength(0);
-    expect(repository.completed[0]).toMatchObject({ sent: false });
+    expect(repository.completed[0]).toMatchObject({ status: 'CANCELLED' });
   });
 
   it('schedules a longer retry the more often a job has failed', async () => {
@@ -188,9 +191,9 @@ describe('EmailOutboxProcessor', () => {
 
     const summary = await buildProcessor(repository, mailer).process();
 
-    expect(summary).toEqual({ claimed: 1, sent: 0, failed: 1, stoppedEarly: false });
+    expect(summary).toEqual({ claimed: 1, sent: 0, failed: 1, cancelled: 0, stoppedEarly: false });
     expect(repository.completed).toEqual([
-      { id: 'job-1', sent: false, error: 'provider unavailable', retrySeconds: 480 },
+      { id: 'job-1', status: 'FAILED', error: 'provider unavailable', retrySeconds: 480 },
     ]);
   });
 
@@ -235,7 +238,7 @@ describe('EmailOutboxProcessor', () => {
 
     // The message went out, so it is reported as sent and nothing is written
     // that would contradict that.
-    expect(summary).toEqual({ claimed: 1, sent: 1, failed: 0, stoppedEarly: false });
+    expect(summary).toEqual({ claimed: 1, sent: 1, failed: 0, cancelled: 0, stoppedEarly: false });
     expect(repository.completed).toHaveLength(0);
   });
 

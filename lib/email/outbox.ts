@@ -35,13 +35,32 @@ export interface OutboxRepository {
   claimNextJob(): Promise<OutboxJob | null>;
   getEntryContext(entryId: string): Promise<OutboxEntryContext | null>;
   recordDelivery(delivery: DeliveryRecord): Promise<void>;
-  completeJob(job: OutboxJob, result: { sent: boolean; error?: string; retrySeconds: number }): Promise<void>;
+  completeJob(job: OutboxJob, result: OutboxOutcome): Promise<void>;
+}
+
+/**
+ * `CANCELLED` is for work that can never succeed, such as a verification retry
+ * whose link expired before the worker reached it. Retrying those forever
+ * would bury the failures an operator can still act on.
+ */
+export type OutboxOutcome =
+  | { status: 'SENT' }
+  | { status: 'FAILED'; error: string; retrySeconds: number }
+  | { status: 'CANCELLED'; error: string };
+
+/** Thrown by a send when no retry could ever make it succeed. */
+export class OutboxJobUnsatisfiable extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'OutboxJobUnsatisfiable';
+  }
 }
 
 export interface OutboxRunSummary {
   claimed: number;
   sent: number;
   failed: number;
+  cancelled: number;
   /** True when the budget ended the run before the batch limit was reached. */
   stoppedEarly: boolean;
 }
@@ -77,7 +96,13 @@ export class EmailOutboxProcessor {
   ): Promise<OutboxRunSummary> {
     const clock = this.dependencies.now ?? (() => Date.now());
     const deadline = clock() + budgetMs;
-    const summary: OutboxRunSummary = { claimed: 0, sent: 0, failed: 0, stoppedEarly: false };
+    const summary: OutboxRunSummary = {
+      claimed: 0,
+      sent: 0,
+      failed: 0,
+      cancelled: 0,
+      stoppedEarly: false,
+    };
 
     for (let processed = 0; processed < limit; processed += 1) {
       // Checked before claiming, so the run never leases a job it has no time
@@ -92,20 +117,21 @@ export class EmailOutboxProcessor {
       summary.claimed += 1;
 
       const outcome = await this.deliver(job);
-      if (outcome.sent) summary.sent += 1;
+      if (outcome.status === 'SENT') summary.sent += 1;
+      else if (outcome.status === 'CANCELLED') summary.cancelled += 1;
       else summary.failed += 1;
     }
 
     return summary;
   }
 
-  private async deliver(job: OutboxJob): Promise<{ sent: boolean }> {
+  private async deliver(job: OutboxJob): Promise<OutboxOutcome> {
     let providerMessageId: string | null = null;
-    let deliveryError: string | null = null;
+    let outcome: OutboxOutcome = { status: 'SENT' };
 
     try {
       const context = await this.dependencies.repository.getEntryContext(job.entryId);
-      if (!context) throw new Error('Outbox entry was not found');
+      if (!context) throw new OutboxJobUnsatisfiable('Outbox entry no longer exists');
 
       const result =
         job.kind === 'VERIFICATION'
@@ -113,37 +139,36 @@ export class EmailOutboxProcessor {
           : await this.sendReceipt(context);
       providerMessageId = result.id ?? null;
     } catch (error) {
-      deliveryError = error instanceof Error ? error.message : 'mail provider failed';
+      const message = error instanceof Error ? error.message : 'mail provider failed';
+      outcome =
+        error instanceof OutboxJobUnsatisfiable
+          ? { status: 'CANCELLED', error: message }
+          : { status: 'FAILED', error: message, retrySeconds: retryDelaySeconds(job.attemptCount) };
     }
 
     try {
       await this.dependencies.repository.recordDelivery({
         entryId: job.entryId,
         kind: job.kind,
-        status: deliveryError === null ? 'SENT' : 'FAILED',
+        status: outcome.status === 'SENT' ? 'SENT' : 'FAILED',
         providerMessageId,
-        providerError: deliveryError,
+        providerError: outcome.status === 'SENT' ? null : outcome.error,
       });
-      await this.dependencies.repository.completeJob(job, {
-        sent: deliveryError === null,
-        error: deliveryError ?? undefined,
-        retrySeconds: retryDelaySeconds(job.attemptCount),
-      });
+      await this.dependencies.repository.completeJob(job, outcome);
     } catch (error) {
       // The message may already be out. Leave the lease to expire rather than
       // recording an outcome we could not persist.
       this.dependencies.onError?.(error);
     }
 
-    return { sent: deliveryError === null };
+    return outcome;
   }
 
   private async sendVerification(context: OutboxEntryContext) {
     const tokenId = context.activeVerificationTokenId;
     if (!tokenId) {
-      // Nothing to resend: the link either expired or was already used. The job
-      // is completed rather than retried forever.
-      throw new Error('No active verification link remains for this entry');
+      // The link expired or was already used, so no retry can ever deliver it.
+      throw new OutboxJobUnsatisfiable('No active verification link remains for this entry');
     }
 
     return this.dependencies.mailer.sendVerification({
@@ -156,7 +181,7 @@ export class EmailOutboxProcessor {
 
   private async sendReceipt(context: OutboxEntryContext) {
     if (context.number === null || context.receiptTokenHash === null) {
-      throw new Error('Receipt requested for an entry without an issued number');
+      throw new OutboxJobUnsatisfiable('Receipt requested for an entry without an issued number');
     }
 
     const receiptToken = this.recoverReceiptToken(context);

@@ -8,6 +8,7 @@ import {
   EmailOutboxProcessor,
   type OutboxEntryContext,
   type OutboxJob,
+  type OutboxOutcome,
   type OutboxRepository,
 } from '../email/outbox';
 import { SupabaseRateLimiter } from '../raffle/rate-limit';
@@ -247,7 +248,7 @@ export class SupabaseRaffleRepository implements RaffleRepository {
     const { error } = await this.client.rpc('complete_email_outbox_job', {
       p_job_id: job.id,
       p_lease_expires_at: job.leaseExpiresAt,
-      p_sent: result.sent,
+      p_outcome: result.sent ? 'SENT' : 'FAILED',
       p_error: result.error ?? null,
       p_retry_seconds: RETRY_BACKOFF_SECONDS,
     });
@@ -329,16 +330,13 @@ export class SupabaseOutboxRepository implements OutboxRepository {
     if (error) throw error;
   }
 
-  async completeJob(
-    job: OutboxJob,
-    result: { sent: boolean; error?: string; retrySeconds: number },
-  ): Promise<void> {
+  async completeJob(job: OutboxJob, result: OutboxOutcome): Promise<void> {
     const { error } = await this.client.rpc('complete_email_outbox_job', {
       p_job_id: job.id,
       p_lease_expires_at: job.leaseExpiresAt,
-      p_sent: result.sent,
-      p_error: result.error ?? null,
-      p_retry_seconds: result.retrySeconds,
+      p_outcome: result.status,
+      p_error: result.status === 'SENT' ? null : result.error,
+      p_retry_seconds: result.status === 'FAILED' ? result.retrySeconds : 0,
     });
     if (error) throw error;
   }
