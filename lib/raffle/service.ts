@@ -95,6 +95,12 @@ export interface RaffleRepository {
   ): Promise<ConfirmedVerification | null>;
   claimReceiptJob(entryId: string): Promise<ReceiptJob | null>;
   completeReceiptJob(job: ReceiptJob, result: { sent: boolean; error?: string }): Promise<void>;
+  /**
+   * Queues a message the inline send could not deliver so the retry worker
+   * takes it over. A send allowance is spent on the message, not on the
+   * attempt, so a provider outage must not cost a visitor one of their three.
+   */
+  armOutboxJob(entryId: string, kind: 'VERIFICATION' | 'RECEIPT', error: string): Promise<void>;
 }
 
 export interface RaffleMailer {
@@ -354,12 +360,16 @@ export class RaffleService {
         providerMessageId: result.id ?? null,
       });
     } catch (error) {
+      const message = messageOf(error);
       await this.dependencies.repository.recordDelivery({
         entryId: entry.id,
         kind: 'VERIFICATION',
         status: 'FAILED',
-        providerError: messageOf(error),
+        providerError: message,
       });
+      // The allowance is already spent, so the message must still arrive. Hand
+      // it to the retry worker instead of losing it.
+      await this.dependencies.repository.armOutboxJob(entry.id, 'VERIFICATION', message);
     }
   }
 

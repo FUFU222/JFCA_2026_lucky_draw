@@ -3,7 +3,13 @@ import 'server-only';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 import type { Campaign, RaffleEntry } from './types';
-import { ResendRaffleMailer } from '../email/resend';
+import { createRaffleMailer } from '../email/mailer';
+import {
+  EmailOutboxProcessor,
+  type OutboxEntryContext,
+  type OutboxJob,
+  type OutboxRepository,
+} from '../email/outbox';
 import { SupabaseRateLimiter } from '../raffle/rate-limit';
 import {
   RaffleLinkError,
@@ -226,6 +232,15 @@ export class SupabaseRaffleRepository implements RaffleRepository {
     };
   }
 
+  async armOutboxJob(entryId: string, kind: 'VERIFICATION' | 'RECEIPT', error: string): Promise<void> {
+    const { error: rpcError } = await this.client.rpc('arm_email_outbox_job', {
+      p_entry_id: entryId,
+      p_kind: kind,
+      p_error: error,
+    });
+    if (rpcError) throw rpcError;
+  }
+
   async completeReceiptJob(job: ReceiptJob, result: { sent: boolean; error?: string }): Promise<void> {
     // Fenced by the lease this worker holds, so a worker whose lease already
     // expired cannot overwrite the outcome recorded by its replacement.
@@ -240,6 +255,105 @@ export class SupabaseRaffleRepository implements RaffleRepository {
   }
 }
 
+export class SupabaseOutboxRepository implements OutboxRepository {
+  constructor(private readonly client: DatabaseClient) {}
+
+  async claimNextJob(): Promise<OutboxJob | null> {
+    const { data, error } = await this.client.rpc('claim_email_outbox_job');
+    if (error) throw error;
+    const claimed = (
+      data as Array<{
+        id: string;
+        entry_id: string;
+        kind: 'VERIFICATION' | 'RECEIPT';
+        attempt_count: number;
+        lease_expires_at: string;
+      }> | null
+    )?.[0];
+    if (!claimed) return null;
+
+    return {
+      id: claimed.id,
+      entryId: claimed.entry_id,
+      kind: claimed.kind,
+      attemptCount: claimed.attempt_count,
+      leaseExpiresAt: claimed.lease_expires_at,
+    };
+  }
+
+  async getEntryContext(entryId: string): Promise<OutboxEntryContext | null> {
+    const { data: entry, error } = await this.client
+      .from('raffle_entries')
+      .select('email, locale, number, receipt_token_hash, campaigns!inner(slug)')
+      .eq('id', entryId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!entry) return null;
+
+    const { data: tokens, error: tokenError } = await this.client
+      .from('verification_tokens')
+      .select('id, expires_at, consumed_at')
+      .eq('entry_id', entryId)
+      .order('created_at', { ascending: false });
+    if (tokenError) throw tokenError;
+
+    const rows = (tokens ?? []) as Array<{
+      id: string;
+      expires_at: string;
+      consumed_at: string | null;
+    }>;
+    const active = rows.find(
+      (token) => token.consumed_at === null && new Date(token.expires_at).getTime() > Date.now(),
+    );
+    const campaign = entry.campaigns as { slug: string } | { slug: string }[];
+
+    return {
+      email: entry.email,
+      locale: entry.locale,
+      campaignSlug: Array.isArray(campaign) ? campaign[0].slug : campaign.slug,
+      number: entry.number === null ? null : BigInt(entry.number),
+      receiptTokenHash: entry.receipt_token_hash,
+      verificationTokenIds: rows.map((token) => token.id),
+      activeVerificationTokenId: active?.id ?? null,
+    };
+  }
+
+  async recordDelivery(delivery: DeliveryRecord): Promise<void> {
+    const { error } = await this.client.from('email_deliveries').insert({
+      entry_id: delivery.entryId,
+      kind: delivery.kind,
+      provider_message_id: delivery.providerMessageId ?? null,
+      provider_status: delivery.status,
+      provider_error: delivery.providerError ?? null,
+    });
+    if (error) throw error;
+  }
+
+  async completeJob(
+    job: OutboxJob,
+    result: { sent: boolean; error?: string; retrySeconds: number },
+  ): Promise<void> {
+    const { error } = await this.client.rpc('complete_email_outbox_job', {
+      p_job_id: job.id,
+      p_lease_expires_at: job.leaseExpiresAt,
+      p_sent: result.sent,
+      p_error: result.error ?? null,
+      p_retry_seconds: result.retrySeconds,
+    });
+    if (error) throw error;
+  }
+}
+
+export function getEmailOutboxProcessor(): EmailOutboxProcessor {
+  return new EmailOutboxProcessor({
+    repository: new SupabaseOutboxRepository(createServiceRoleClient()),
+    mailer: createRaffleMailer(),
+    verificationTokenSecret: requiredSecret('VERIFICATION_TOKEN_SECRET'),
+    receiptTokenSecret: requiredSecret('RECEIPT_TOKEN_SECRET'),
+    onError: (error) => console.error('Outbox bookkeeping failed', error),
+  });
+}
+
 function requiredSecret(name: string): string {
   const value = process.env[name];
   if (!value) throw new Error(`${name} is not configured`);
@@ -250,7 +364,7 @@ export function getRaffleService(): RaffleService {
   const client = createServiceRoleClient();
   return new RaffleService({
     repository: new SupabaseRaffleRepository(client),
-    mailer: new ResendRaffleMailer(),
+    mailer: createRaffleMailer(),
     turnstile: new TurnstileVerifier(),
     rateLimiter: new SupabaseRateLimiter(client),
     verificationTokenSecret: requiredSecret('VERIFICATION_TOKEN_SECRET'),

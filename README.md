@@ -86,6 +86,35 @@ pnpm audit --prod --audit-level high
 pnpm audit --audit-level high
 ```
 
+## Transactional email
+
+Both messages are React Email templates under `emails/`, rendered to HTML and a
+plain-text alternative by `lib/email/templates.ts`. The sender is
+`LIVAPON <info@chairman.jp>`.
+
+Delivery is inline first and durable second. A visitor standing at the venue
+gets their verification link immediately; if the provider refuses it, the
+message is armed in `email_outbox` and `/api/internal/email-outbox` retries it.
+The retry worker rebuilds the permanent receipt link from the stored hash, so
+nothing has to keep a bearer token around to make a retry possible.
+
+- `MAIL_DELIVERY_MODE=send` — deliver through Resend.
+- `MAIL_DELIVERY_MODE=log` — render the real template and record a successful
+  delivery without contacting a provider. Use it for staging and load tests.
+  Production refuses it at startup rather than silently swallowing every
+  message.
+
+`vercel.json` schedules the worker every minute. It requires
+`Authorization: Bearer ${CRON_SECRET}` and compares the value in constant time.
+Set `CRON_SECRET` in Vercel before the first deploy, or the endpoint refuses
+every request, including the cron.
+
+To look at the rendered emails:
+
+```bash
+pnpm email:preview
+```
+
 ## Token secrets
 
 The server never stores a bearer token, only its SHA-256 hash, so both links are

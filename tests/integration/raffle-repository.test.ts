@@ -1,7 +1,8 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
-import { SupabaseRaffleRepository } from '../../lib/db/server';
+import { SupabaseOutboxRepository, SupabaseRaffleRepository } from '../../lib/db/server';
+import { EmailOutboxProcessor } from '../../lib/email/outbox';
 import { SupabaseRateLimiter } from '../../lib/raffle/rate-limit';
 import { RaffleService, type RaffleMailer } from '../../lib/raffle/service';
 
@@ -20,8 +21,10 @@ class FakeMailer implements RaffleMailer {
   readonly verification: Array<{ eventSlug: string; email: string; token: string }> = [];
   readonly receipts: Array<{ email: string; number: bigint; receiptToken: string }> = [];
   receiptFailure: Error | null = null;
+  verificationFailure: Error | null = null;
 
   async sendVerification(input: { eventSlug: string; email: string; token: string }) {
+    if (this.verificationFailure) throw this.verificationFailure;
     this.verification.push(input);
     return { id: `verification-${this.verification.length}` };
   }
@@ -31,6 +34,16 @@ class FakeMailer implements RaffleMailer {
     this.receipts.push(input);
     return { id: `receipt-${this.receipts.length}` };
   }
+}
+
+function buildOutboxProcessor(mailer: FakeMailer) {
+  return new EmailOutboxProcessor({
+    repository: new SupabaseOutboxRepository(supabase),
+    mailer,
+    verificationTokenSecret: VERIFICATION_SECRET,
+    receiptTokenSecret: RECEIPT_SECRET,
+    onError: () => {},
+  });
 }
 
 let supabase: SupabaseClient;
@@ -420,6 +433,139 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
       .select('id')
       .eq('campaign_id', campaign.id);
     expect(entries).toHaveLength(1);
+  });
+
+  it('hands a verification email the provider refused to the retry worker', async () => {
+    const campaign = await createOpenCampaign();
+    const mailer = new FakeMailer();
+    const service = buildService(mailer);
+    mailer.verificationFailure = new Error('provider unavailable');
+
+    await expect(
+      service.requestVerification({
+        eventSlug: campaign.slug,
+        email: `retry-${uniqueSuffix()}@example.com`,
+        locale: 'en',
+        termsConsent: true,
+        turnstileToken: 'captcha',
+      }),
+    ).resolves.toEqual({ accepted: true });
+
+    const entry = await entryId(campaign.id);
+    const { data: queued } = await supabase
+      .from('email_outbox')
+      .select('kind, status, last_error')
+      .eq('entry_id', entry ?? '')
+      .single();
+    expect(queued).toMatchObject({
+      kind: 'VERIFICATION',
+      status: 'PENDING',
+      last_error: 'provider unavailable',
+    });
+
+    // The allowance was spent on the message, so the visitor keeps their three
+    // sends and the worker delivers the same link.
+    const { data: token } = await supabase
+      .from('verification_tokens')
+      .select('send_count')
+      .eq('entry_id', entry ?? '')
+      .single();
+    expect(token?.send_count).toBe(1);
+
+    mailer.verificationFailure = null;
+    const summary = await buildOutboxProcessor(mailer).process();
+
+    expect(summary).toMatchObject({ claimed: 1, sent: 1, failed: 0 });
+    expect(mailer.verification).toHaveLength(1);
+
+    const { data: after } = await supabase
+      .from('email_outbox')
+      .select('status, attempt_count, lease_expires_at')
+      .eq('entry_id', entry ?? '')
+      .single();
+    expect(after).toMatchObject({ status: 'SENT', attempt_count: 1 });
+    expect(after?.lease_expires_at).toBeNull();
+  });
+
+  it('delivers a receipt the inline send could not, on the next worker run', async () => {
+    const campaign = await createOpenCampaign();
+    const mailer = new FakeMailer();
+    const service = buildService(mailer);
+
+    await service.requestVerification({
+      eventSlug: campaign.slug,
+      email: `receipt-retry-${uniqueSuffix()}@example.com`,
+      locale: 'ja',
+      termsConsent: true,
+      turnstileToken: 'captcha',
+    });
+    mailer.receiptFailure = new Error('provider unavailable');
+
+    const confirmed = await service.confirmVerification({
+      eventSlug: campaign.slug,
+      token: mailer.verification[0].token,
+    });
+    expect(confirmed?.number).toBe(BigInt(10_000));
+    expect(mailer.receipts).toHaveLength(0);
+
+    // A failed job is not immediately claimable; it becomes available after the
+    // backoff the worker recorded.
+    const entry = await entryId(campaign.id);
+    await supabase
+      .from('email_outbox')
+      .update({ available_at: new Date(Date.now() - 1_000).toISOString() })
+      .eq('entry_id', entry ?? '');
+
+    mailer.receiptFailure = null;
+    const summary = await buildOutboxProcessor(mailer).process();
+
+    expect(summary).toMatchObject({ claimed: 1, sent: 1, failed: 0 });
+    expect(mailer.receipts).toHaveLength(1);
+    // The permanent link is rebuilt from the stored hash, not carried over.
+    expect(mailer.receipts[0].receiptToken).toBe(confirmed?.receiptToken);
+    expect(mailer.receipts[0].number).toBe(BigInt(10_000));
+
+    const { data: after } = await supabase
+      .from('email_outbox')
+      .select('status, attempt_count')
+      .eq('entry_id', entry ?? '')
+      .single();
+    expect(after).toMatchObject({ status: 'SENT', attempt_count: 2 });
+  });
+
+  it('does not re-arm a job another worker currently holds', async () => {
+    const campaign = await createOpenCampaign();
+    const mailer = new FakeMailer();
+    const service = buildService(mailer);
+    const repository = new SupabaseRaffleRepository(supabase);
+
+    await service.requestVerification({
+      eventSlug: campaign.slug,
+      email: `armed-${uniqueSuffix()}@example.com`,
+      locale: 'en',
+      termsConsent: true,
+      turnstileToken: 'captcha',
+    });
+    const entry = await entryId(campaign.id);
+
+    await repository.armOutboxJob(entry ?? '', 'VERIFICATION', 'first failure');
+    await supabase
+      .from('email_outbox')
+      .update({
+        status: 'PROCESSING',
+        leased_at: new Date().toISOString(),
+        lease_expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      })
+      .eq('entry_id', entry ?? '');
+
+    await repository.armOutboxJob(entry ?? '', 'VERIFICATION', 'second failure');
+
+    const { data: job } = await supabase
+      .from('email_outbox')
+      .select('status, last_error')
+      .eq('entry_id', entry ?? '')
+      .single();
+    expect(job).toMatchObject({ status: 'PROCESSING', last_error: 'first failure' });
   });
 
   it('reports an unknown link as unusable rather than as a server fault', async () => {
