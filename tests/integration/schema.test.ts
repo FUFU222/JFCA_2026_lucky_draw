@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
@@ -163,19 +165,26 @@ describeWithSupabase('lucky draw schema', () => {
   it('seeds the initial jfca-2026 campaign', async () => {
     const { data, error } = await supabase
       .from('campaigns')
-      .select('slug, title, status, next_number, opens_at, draw_starts_at')
+      .select('slug, title')
       .eq('slug', 'jfca-2026')
       .single();
 
     expect(error).toBeNull();
-    expect(data).toMatchObject({
-      slug: 'jfca-2026',
-      title: 'Japan Festival Canada 2026',
-      status: 'DRAFT',
-      next_number: 10_000,
-      opens_at: null,
-      draw_starts_at: null,
-    });
+    expect(data).toMatchObject({ slug: 'jfca-2026', title: 'Japan Festival Canada 2026' });
+  });
+
+  it('never opens the campaign it seeds', async () => {
+    // Asserted against the seed itself rather than the row, because an operator
+    // legitimately changes the row's status and dates. The property that has to
+    // hold is that the campaign is not born open.
+    const seed = await readFile('supabase/seed.sql', 'utf8');
+
+    expect(seed).toContain("'DRAFT'");
+    expect(seed).not.toMatch(/'SCHEDULED'|'CLOSED'/);
+    // Both timestamps are inserted as nulls, so a fresh deployment cannot start
+    // accepting entries before an operator sets a schedule.
+    expect(seed.match(/\bnull\b/g) ?? []).toHaveLength(2);
+    expect(seed).toContain('on conflict (slug) do nothing');
   });
 
   it('rejects a duplicate verified number within one campaign', async () => {
