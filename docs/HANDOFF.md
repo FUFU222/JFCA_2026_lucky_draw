@@ -1,4 +1,4 @@
-# Lucky Draw handoff — updated 2026-07-27 (session 2)
+# Lucky Draw handoff — updated 2026-07-28 (session 2)
 
 ## Repository and branch
 
@@ -30,12 +30,16 @@ The full service design is [design.md](/Users/fufu/Downloads/design.md). The imp
 | 2. Supabase schema, seed, RPCs | Complete — **now actually verified against Postgres** |
 | 3. Numbers, tokens, validation, rate-limit abstraction | Complete |
 | 4. Registration / resend / confirmation services and routes | Complete, reviewed, committed |
+| 5. Email templates, Resend adapter, outbox retry worker, log mode | Complete, committed |
 
 Commits added in session 2:
 
 - `73339ad` `fix: make the raffle schema apply and reach the server role`
 - `6ba6266` `feat: add verified raffle entry flow`
 - `66ffd07` `fix: close the gaps an adversarial review found in the entry flow`
+- `230f7b5` `feat: add raffle email templates and durable delivery`
+- `275d43d` `fix: fail a misconfigured deployment at boot, not at first message`
+- `2cce897` `fix: retire outbox work that no retry could ever deliver`
 
 ### What session 2 found in "reviewed" Task 2 work
 
@@ -89,7 +93,8 @@ Properties that are enforced rather than assumed:
 
 ## Test suites
 
-80 tests, all passing, plus one Playwright smoke test.
+122 tests, all passing, plus one Playwright smoke test. The suite was run
+five times to confirm it is not order-dependent.
 
 - `tests/unit/*` — numbers, tokens, validation, rate limiter, campaign config.
 - `tests/integration/schema.test.ts` — tables, constraints, and every RPC,
@@ -100,38 +105,66 @@ Properties that are enforced rather than assumed:
 - `tests/integration/raffle-service.test.ts` — service decisions with an
   in-memory repository that mirrors the atomic steps the SQL actually provides.
 - `tests/integration/raffle-routes.test.ts` — handler shaping and status mapping.
+- `tests/unit/emails.test.ts` — both templates in both locales, including that
+  neither says anything about winning or losing.
+- `tests/unit/mailer.test.ts`, `tests/unit/startup.test.ts` — delivery mode
+  selection and the boot-time configuration check.
+- `tests/integration/email-outbox.test.ts`,
+  `tests/integration/email-outbox-route.test.ts` — the worker and its endpoint.
 
 `vitest.config.ts` sets `fileParallelism: false`: the integration suites share
 one database and the global outbox claim will lease another file's job.
 
+## Task 5 as delivered
+
+- `emails/` — bilingual React Email templates plus one inline style module.
+  `lib/email/templates.ts` renders HTML and a plain-text alternative and owns
+  the subject lines and the `LIVAPON <info@chairman.jp>` sender.
+- `lib/email/mailer.ts` — `createRaffleMailer()` picks the Resend adapter or
+  `LoggingRaffleMailer` from `MAIL_DELIVERY_MODE`.
+- `lib/email/outbox.ts` — `EmailOutboxProcessor`: claim, deliver, record,
+  complete. Backoff doubles per attempt to a six-hour cap, the run has a
+  25-second budget checked *before* claiming, and work no retry could satisfy
+  ends `CANCELLED` rather than failing forever.
+- `app/api/internal/email-outbox/route.ts` + `vercel.json` — the per-minute
+  worker, `Bearer ${CRON_SECRET}` compared in constant time, GET and POST.
+- `instrumentation.ts` + `lib/config/startup.ts` — one boot-time check that
+  refuses log mode in production, a Cloudflare test secret, or any missing
+  production variable.
+- Migrations `0003` (`arm_email_outbox_job`) and `0004` (`CANCELLED` state and
+  the outcome-taking `complete_email_outbox_job`).
+
+Delivery is inline first and durable second: a visitor at the venue gets their
+link immediately, and only a refused send is handed to the worker. A send
+allowance is therefore spent on the *message*, not on the attempt.
+
+`@react-email/components` was installed and removed — its latest release is
+deprecated because react-email 6 exports the components and the renderer from
+the package already in use.
+
 ## Known gaps, deliberately deferred
 
-1. **The emailed links point at pages that do not exist yet.** `lib/email/resend.ts`
-   builds `/{eventSlug}/verify/{token}` and `/{eventSlug}/number/{token}`; Task 6
-   builds those pages. Do not send real mail before then.
-2. **Nothing calls `claim_email_outbox_job()`.** A failed receipt sits in
-   `FAILED` until Task 5 adds the cron worker.
-3. **A verification send allowance is spent on the attempt, not on delivery.** A
-   Resend outage can burn all three sends for a token. Task 5 should decide
-   whether verification mail also goes through the outbox.
-4. **`/entries/resend` with an expired token returns the generic 202 and sends
+1. **The emailed links point at pages that do not exist yet.** The mailer builds
+   `/{eventSlug}/verify/{token}` and `/{eventSlug}/number/{token}`; Task 6 builds
+   those pages. **Do not send real mail before then.**
+2. **`/entries/resend` with an expired token returns the generic 202 and sends
    nothing.** That matches the spec (a re-application issues a new link, a resend
    does not), but Task 6 must tell the visitor to submit the form again.
-5. **The per-IP limit trusts `x-real-ip` / `x-forwarded-for`.** Confirm in Task 8
+3. **The per-IP limit trusts `x-real-ip` / `x-forwarded-for`.** Confirm in Task 8
    that the deployment edge overwrites both; if it does not, the limit is
    bypassable.
-6. **The Resend SDK call has no timeout.** Turnstile does (5s). Task 5 owns the
-   mailer.
-7. **Confirmation is refused once `draw_starts_at` passes or the campaign is
-   `CLOSED`.** This is a decision made in session 2, not something design.md
-   states. Confirm it with the operator; `PAUSED` deliberately does **not** block
-   confirmation, because pausing is about intake.
+4. **The Resend send is raced against a 10-second timeout, not cancelled.** A
+   request that wins the race after the timeout may already have delivered, so a
+   retry can duplicate a message. Duplicates are preferred to losses.
+5. **Confirmation is refused once `draw_starts_at` passes or the campaign is
+   `CLOSED`.** Decided in session 2 and confirmed by the operator. `PAUSED`
+   deliberately does **not** block confirmation, because pausing is about intake.
+6. **Cron reliability is unverified.** `vercel.json` and `CRON_SECRET` are only
+   exercised by unit tests; Task 8 must confirm the schedule actually fires in
+   the deployed project.
 
-## Remaining plan
+## Remaining plan (Task 5 is done)
 
-5. React Email templates, Resend adapter completion, secure one-minute Vercel
-   Cron outbox processor, staging `MAIL_DELIVERY_MODE=log`, production rejection
-   of log mode.
 6. Bilingual public registration/verification/receipt pages, session draft,
    Turnstile UI, required confirmation dialog, terms/privacy links, public E2E.
 7. `@chairman.jp` Supabase magic-link administration, dashboard, search, CSV
