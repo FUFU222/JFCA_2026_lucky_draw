@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { isRegistrationOpen } from '../campaign/config';
 import type { Campaign, RaffleEntry } from '../db/types';
 import { deriveReceiptToken, deriveVerificationToken, hashToken } from './tokens';
+import { RATE_LIMIT_WINDOW_SECONDS, emailRequestLimit, ipRequestLimit } from './limits';
 import {
   confirmRequestSchema,
   resendRequestSchema,
@@ -12,9 +13,6 @@ import {
 const TOKEN_LIFETIME_MS = 24 * 60 * 60 * 1000;
 export const RESEND_COOLDOWN_SECONDS = 2 * 60;
 export const MAX_VERIFICATION_SENDS = 3;
-const RATE_LIMIT_WINDOW_SECONDS = 24 * 60 * 60;
-const EMAIL_REQUEST_LIMIT = 5;
-const IP_REQUEST_LIMIT = 20;
 
 /**
  * Raised when the database reports that a verification link cannot be used:
@@ -140,6 +138,8 @@ export interface RaffleServiceDependencies {
   receiptTokenSecret: string;
   now?: () => Date;
   onDeliveryError?: (error: unknown) => void;
+  /** Defaults come from the environment; tests inject them directly. */
+  limits?: { email: number; ip: number };
 }
 
 export class RaffleService {
@@ -293,16 +293,21 @@ export class RaffleService {
     // The address limit is consumed first and the checks are sequential: an
     // address that is already over its limit must not be able to keep creating
     // per-address buckets, and a blocked caller must not burn a shared bucket.
+    const limits = this.dependencies.limits ?? {
+      email: emailRequestLimit(),
+      ip: ipRequestLimit(),
+    };
+
     const ipAllowed = await this.dependencies.rateLimiter.consume(
       `raffle:ip:${hashToken(`${eventSlug}:${ipAddress ?? 'unknown'}`)}`,
-      IP_REQUEST_LIMIT,
+      limits.ip,
       RATE_LIMIT_WINDOW_SECONDS,
     );
     if (!ipAllowed) return false;
 
     return this.dependencies.rateLimiter.consume(
       `raffle:email:${hashToken(`${eventSlug}:${email}`)}`,
-      EMAIL_REQUEST_LIMIT,
+      limits.email,
       RATE_LIMIT_WINDOW_SECONDS,
     );
   }

@@ -143,6 +143,34 @@ To look at the rendered emails:
 pnpm email:preview
 ```
 
+## Going live
+
+Two documents own the deployment:
+
+- [docs/operations/prelaunch-checklist.md](docs/operations/prelaunch-checklist.md)
+  — Supabase, Resend, Turnstile, Vercel, the legal wording, the event schedule,
+  and the manual checks that must pass **before the QR code is printed**.
+- [docs/operations/on-site-runbook.md](docs/operations/on-site-runbook.md) —
+  what the operator does at the venue, including the one thing most likely to
+  surprise them: a shared venue network makes many visitors look like one IP.
+
+The schedule is data, not code. Opening and draw times are set on the campaign
+row; registration closes automatically 30 minutes before the draw starts. No
+prize information exists anywhere in this application.
+
+### Load test
+
+Run against staging only, where `MAIL_DELIVERY_MODE=log` and the Turnstile test
+secret are configured. Production refuses both.
+
+```bash
+pnpm load-test --url https://staging.example.com --rate 100 --seconds 30
+```
+
+The target is 100 verification requests per second with no server errors, no
+duplicate numbers, and a controlled 429 for traffic over the limit. The script
+prints the SQL to check for duplicates and to clean up afterwards.
+
 ## Token secrets
 
 The server never stores a bearer token, only its SHA-256 hash, so both links are

@@ -22,10 +22,14 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
   ],
-  webServer: {
-    command: 'pnpm exec next dev --port 3001',
-    url: 'http://localhost:3001',
-    reuseExistingServer: false,
-    timeout: 120_000,
-  },
+  // The smoke suite runs against an already-deployed origin, so it must not
+  // start a local server or point at one.
+  webServer: process.env.SMOKE_BASE_URL
+    ? undefined
+    : {
+        command: 'pnpm exec next dev --port 3001',
+        url: 'http://localhost:3001',
+        reuseExistingServer: false,
+        timeout: 120_000,
+      },
 });

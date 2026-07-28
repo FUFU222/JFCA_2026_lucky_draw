@@ -16,7 +16,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "email:preview": "email dev --dir emails"
+    "email:preview": "email dev --dir emails",
+    "load-test": "node scripts/load-test.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.3",
