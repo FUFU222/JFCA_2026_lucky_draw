@@ -30,3 +30,23 @@ export function isRegistrationOpen(
 
   return nowMs >= opensAtMs && nowMs < drawStartsAtMs - REGISTRATION_CLOSE_BUFFER_MS;
 }
+
+/**
+ * What the same URL should say when it is not accepting entries. `DRAFT` and a
+ * not-yet-reached opening both read as "not open yet"; a paused or closed
+ * campaign, and one past its cut-off, read as finished.
+ */
+export type RegistrationPhase = 'before' | 'open' | 'closed';
+
+export function registrationPhase(
+  campaign: CampaignSchedule,
+  now: Date = new Date(),
+): RegistrationPhase {
+  if (isRegistrationOpen(campaign, now)) return 'open';
+  if (campaign.status === 'PAUSED' || campaign.status === 'CLOSED') return 'closed';
+  if (campaign.status === 'DRAFT' || campaign.opens_at === null) return 'before';
+
+  const opensAtMs = new Date(campaign.opens_at).getTime();
+  if (Number.isNaN(opensAtMs)) return 'before';
+  return now.getTime() < opensAtMs ? 'before' : 'closed';
+}

@@ -71,9 +71,37 @@ values (
 on conflict (slug) do nothing;
 ```
 
+### Running the app locally
+
+Create `.env.local` (gitignored) from `.env.example`. For local work the
+Supabase values are the ones `pnpm exec supabase status -o json` prints, and:
+
+```dotenv
+MAIL_DELIVERY_MODE=log
+TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
+NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA
+```
+
+Those are Cloudflare's published always-pass test credentials. Production
+refuses them at startup.
+
+The seeded campaign is `DRAFT` with no dates, so the page shows "entries are not
+open yet". To see the form, open it:
+
+```sql
+update public.campaigns
+set status = 'SCHEDULED',
+    opens_at = now() - interval '1 hour',
+    draw_starts_at = now() + interval '2 days'
+where slug = 'jfca-2026';
+```
+
+With `MAIL_DELIVERY_MODE=log`, the confirmation link is printed to the server
+console, so the whole journey can be walked without a mailbox.
+
 ### End-to-end tests
 
-Install the Playwright Chromium browser once with `pnpm exec playwright install chromium`. `pnpm test:e2e` starts the Next.js development server automatically and runs the E2E smoke tests in `e2e/*.spec.ts`.
+Install the Playwright Chromium browser once with `pnpm exec playwright install chromium`. `pnpm test:e2e` starts the Next.js development server automatically and runs `e2e/public-journey.spec.ts`, which drives the real form, the confirmation dialog, and the number page against the local database. It skips when `.env.local` is absent.
 
 ## Quality checks
 

@@ -33,8 +33,10 @@ export class LoggingRaffleMailer implements RaffleMailer {
 
   constructor(
     private readonly appUrl = process.env.NEXT_PUBLIC_APP_URL ?? '',
+    // The link is the point of the message, so log mode prints it: it is how a
+    // developer or a staging tester walks the flow without a mailbox.
     private readonly log: (message: LoggedRaffleEmail) => void = (message) =>
-      console.info('[mail:log] %s -> %s (%s)', message.kind, message.to, message.subject),
+      console.info('[mail:log] %s -> %s | %s | %s', message.kind, message.to, message.subject, message.url),
   ) {}
 
   /** Total messages this mailer has accepted, including ones no longer buffered. */

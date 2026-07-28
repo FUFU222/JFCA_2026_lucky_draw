@@ -1,6 +1,14 @@
 import { existsSync } from 'node:fs';
 
+import { cleanup } from '@testing-library/react';
+import { afterEach } from 'vitest';
+
 import '@testing-library/jest-dom/vitest';
+
+// Testing Library only auto-cleans when Vitest globals are on, and they are
+// not. Without this, a second render of the same component finds two of
+// everything.
+afterEach(cleanup);
 
 // Vitest does not populate `process.env` from dotenv files, so the Supabase
 // integration suites would silently skip even after the documented README
