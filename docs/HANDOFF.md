@@ -1,4 +1,4 @@
-# Lucky Draw handoff — updated 2026-07-28 (session 2)
+# Lucky Draw handoff — updated 2026-07-28 (session 2, plan complete)
 
 ## Repository and branch
 
@@ -6,7 +6,7 @@
 - Active implementation worktree: `/Users/fufu/code/JFCA2026_lucky_draw/.worktrees/lucky-draw`
 - Branch: `codex/lucky-draw`
 - Do **not** work directly on `main`. `main` contains only the documented baseline.
-- The working tree is clean. Tasks 1–6 are committed.
+- The working tree is clean. **All eight plan tasks are committed.**
 
 ## Product decisions (authoritative)
 
@@ -32,6 +32,8 @@ The full service design is [design.md](/Users/fufu/Downloads/design.md). The imp
 | 4. Registration / resend / confirmation services and routes | Complete, reviewed, committed |
 | 5. Email templates, Resend adapter, outbox retry worker, log mode | Complete, committed |
 | 6. Bilingual public pages, confirmation dialogs, Turnstile, terms | Complete, committed |
+| 7. `@chairman.jp` administration, search, CSV export, audit, pause/resume | Complete, committed |
+| 8. Operations docs, load test, production smoke suite | Complete, committed |
 
 Commits added in session 2:
 
@@ -42,6 +44,8 @@ Commits added in session 2:
 - `275d43d` `fix: fail a misconfigured deployment at boot, not at first message`
 - `2cce897` `fix: retire outbox work that no retry could ever deliver`
 - `95eacb9` `feat: build the public raffle experience`
+- `f7e5a31` `feat: add raffle operator administration`
+- `332b68f` `docs: add lucky draw release runbook`
 
 ### What session 2 found in "reviewed" Task 2 work
 
@@ -95,8 +99,8 @@ Properties that are enforced rather than assumed:
 
 ## Test suites
 
-145 unit and integration tests, plus 6 Playwright specs covering the public
-journey end to end. All passing.
+178 unit and integration tests, plus 12 Playwright specs (public journey and
+admin) and a 9-spec read-only production smoke suite. All passing.
 
 - `tests/unit/*` — numbers, tokens, validation, rate limiter, campaign config.
 - `tests/integration/schema.test.ts` — tables, constraints, and every RPC,
@@ -119,6 +123,12 @@ journey end to end. All passing.
   gate, draft recovery, and both dialogs.
 - `e2e/public-journey.spec.ts` — the real form in both languages, the two-step
   confirmation, the number page, a used link, and an expired link.
+- `e2e/admin.spec.ts` — a real magic-link sign-in read out of the local mail
+  catcher, the domain refusal, pause/resume, export, and search.
+- `e2e/production-smoke.spec.ts` — read-only, skipped unless `SMOKE_BASE_URL`
+  is set.
+- `tests/unit/admin-authorization.test.ts`, `tests/unit/admin-csv.test.ts`,
+  `tests/unit/limits.test.ts`, `tests/integration/admin-*.test.ts`.
 
 `vitest.config.ts` sets `fileParallelism: false`: the integration suites share
 one database and the global outbox claim will lease another file's job.
@@ -181,6 +191,41 @@ Properties worth keeping:
 - **Testing Library's automatic cleanup was not running**, because it only
   registers itself when Vitest globals are enabled. `tests/setup.ts` now calls
   `cleanup` in an `afterEach`.
+
+## Tasks 7 and 8 as delivered
+
+- `lib/security/admin.ts` — domain-only authorization, a strict pattern rather
+  than a suffix check, ASCII-only so a homoglyph domain cannot match. Checked
+  before the sign-in link is requested and again after the callback; a session
+  that fails the second check is signed out, not merely refused.
+- `app/admin/*`, `components/admin/*` — dashboard, entry search, CSV export,
+  pause/resume. Every one of them requires an operator session server-side.
+- `lib/admin/csv.ts` — RFC 4180, UTF-8 BOM, and a prefix on values a spreadsheet
+  would execute as a formula.
+- `lib/admin/audit.ts` — login, export, pause and resume are recorded with the
+  actor and the row count, never the exported rows.
+- `docs/operations/` — pre-launch checklist and on-site runbook.
+- `scripts/load-test.mjs`, `e2e/production-smoke.spec.ts`.
+
+### The venue network problem
+
+The per-IP allowance was 20 per day. Hundreds of visitors at a festival share
+the venue wifi and a few carrier NAT addresses, so the twenty-first genuine
+entrant would have been rate limited and the event would have looked broken.
+The default is now 500 and both allowances are environment-configurable
+(`RAFFLE_IP_REQUEST_LIMIT`, `RAFFLE_EMAIL_REQUEST_LIMIT`) so they can be raised
+during the event without a deploy. **This is the first thing to check if
+visitors report "Too many attempts".**
+
+### Two Supabase settings that are easy to miss
+
+Both were found by driving the real sign-in flow, and both apply to production:
+
+- `auth.additional_redirect_urls` must contain the deployed
+  `/auth/callback`, or Supabase silently sends the operator to the project's
+  default site URL instead.
+- `auth.rate_limit.email_sent` is per hour and defaults to 2. Local is raised to
+  200 for the E2E suite; production should stay low.
 
 ## Known gaps, deliberately deferred
 
