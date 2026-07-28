@@ -83,15 +83,19 @@ step in [on-site-runbook.md](on-site-runbook.md). Cancel by **2026-08-31**.
 | `RAFFLE_IP_REQUEST_LIMIT` | `100000` — see the venue note below |
 | `RAFFLE_EMAIL_REQUEST_LIMIT` | leave unset (defaults to 5) |
 
-- [ ] **Confirm the plan supports a per-minute cron.** `vercel.json` asks for
-      `* * * * *`. On the Hobby plan cron jobs run at most **once a day**, which
-      would leave a failed confirmation email undelivered for up to 24 hours —
-      unusable for a one-day event. A paid plan is required, or the retry worker
-      must be triggered from somewhere else.
-- [ ] Confirm the cron appears under Settings → Cron Jobs and is enabled.
-      Without `CRON_SECRET` it receives 401 and no retry will ever run.
-- [ ] The worker declares `maxDuration = 30`. Confirm the plan allows it; the
-      deploy fails loudly if not.
+- [ ] **Add the two GitHub Actions repository secrets the retry worker needs**:
+      `APP_URL` (the production origin, e.g. `https://luckydraw.livapon.com`)
+      and `CRON_SECRET` (the same value as the Vercel environment variable).
+      Settings → Secrets and variables → Actions, on the repository. The worker
+      runs on GitHub Actions' schedule trigger rather than Vercel Cron
+      specifically so the Hobby plan's once-a-day cron limit is not in the
+      critical path — a failed confirmation email must not go undelivered for
+      up to 24 hours on a one-day event.
+- [ ] Confirm the workflow is enabled under the repository's **Actions** tab,
+      and run it once manually (`workflow_dispatch`) to prove the two secrets
+      are correct before relying on the schedule.
+- [ ] The worker declares `maxDuration = 60`. Confirm the Vercel plan allows it;
+      the deploy fails loudly if not.
 - [ ] **Set `RAFFLE_IP_REQUEST_LIMIT` high — 100000.** The window is a fixed 24
       hours, not a sliding one, so a venue wifi or carrier NAT address that
       crosses the limit stays blocked for the rest of the event. The default of

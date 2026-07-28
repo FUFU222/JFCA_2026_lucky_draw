@@ -6,11 +6,14 @@ import { getEmailOutboxProcessor } from '../../../../lib/db/server';
 import { OUTBOX_BATCH_LIMIT } from '../../../../lib/email/outbox';
 
 /**
- * Retry worker for messages the inline send could not deliver. Vercel Cron
- * calls this every minute with `Authorization: Bearer ${CRON_SECRET}`; nothing
- * else may reach it, so the response never reveals whether a job existed.
+ * Retry worker for messages the inline send could not deliver. A GitHub
+ * Actions workflow (`.github/workflows/email-outbox.yml`) calls this every 5
+ * minutes with `Authorization: Bearer ${CRON_SECRET}`, so the Hobby plan's
+ * once-a-day Vercel Cron limit is not in the critical path. Nothing else may
+ * reach it, so the response never reveals whether a job existed.
  *
- * Vercel Cron issues GET, so both verbs share one handler.
+ * GET is kept alongside POST in case this is ever called from Vercel Cron
+ * instead, which issues GET.
  */
 export const dynamic = 'force-dynamic';
 
@@ -38,7 +41,7 @@ function isAuthorizedCron(request: Request): boolean {
   if (!expected) return false;
 
   // The scheme is required, not stripped opportunistically: the only caller is
-  // Vercel Cron, and it always sends `Bearer`.
+  // the GitHub Actions workflow, and it always sends `Bearer`.
   const scheme = /^Bearer (.+)$/.exec(request.headers.get('authorization') ?? '');
   const presented = scheme?.[1];
   if (!presented) return false;

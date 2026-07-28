@@ -37,7 +37,7 @@ describe('email outbox cron endpoint', () => {
     expect(processor.process).toHaveBeenCalledWith(20);
   });
 
-  it('answers Vercel Cron, which issues GET', async () => {
+  it('also answers GET, in case Vercel Cron ever calls this instead', async () => {
     processor.process.mockResolvedValue({ claimed: 0, sent: 0, failed: 0 });
 
     const response = await GET(request(`Bearer ${CRON_SECRET}`));

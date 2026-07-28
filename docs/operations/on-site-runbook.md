@@ -44,10 +44,11 @@ IP**.
    provider's reason.
 4. "Emails waiting to send" is briefly non-zero during normal traffic — every
    confirmation queues a receipt that is sent immediately. A number that climbs
-   and does not fall means either the worker is not running (check the Vercel
-   cron job and that `CRON_SECRET` is set for Production) or it is at its cap of
-   20 messages a minute, which is the more likely cause after a provider
-   incident.
+   and does not fall means either the worker is not running (check the
+   repository's **Actions** tab for the `Email outbox retry worker` workflow,
+   and that `CRON_SECRET` matches between the GitHub Actions secret and the
+   Vercel environment variable) or it is at its cap of 20 messages per run,
+   which is the more likely cause after a provider incident.
 
 ## Someone lost their number
 
@@ -100,6 +101,7 @@ recorded with who ran it and how many rows — never the rows themselves.
    cancelled by **2026-08-31**. Check the outbox is empty first, and that no
    entry is still `PENDING` with a link that has not expired — those visitors
    can still confirm within 24 hours of their last send.
-5. Anything else bought for the event and not needed afterwards — the raised
-   Resend API rate limit, a Vercel plan taken purely for the per-minute cron —
-   goes at the same time and for the same reason.
+5. Anything else bought for the event and not needed afterwards — a raised
+   Resend API rate limit, for instance — goes at the same time and for the
+   same reason. The retry worker runs on GitHub Actions, not a paid Vercel
+   plan, so there is nothing to cancel there.

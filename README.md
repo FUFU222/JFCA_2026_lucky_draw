@@ -132,10 +132,15 @@ nothing has to keep a bearer token around to make a retry possible.
   Production refuses it at startup rather than silently swallowing every
   message.
 
-`vercel.json` schedules the worker every minute. It requires
-`Authorization: Bearer ${CRON_SECRET}` and compares the value in constant time.
-Set `CRON_SECRET` in Vercel before the first deploy, or the endpoint refuses
-every request, including the cron.
+`.github/workflows/email-outbox.yml` calls the worker every 5 minutes — GitHub
+Actions' shortest supported interval, and independent of the Vercel plan tier,
+which matters because Vercel Cron on the Hobby plan runs at most once a day.
+The endpoint requires `Authorization: Bearer ${CRON_SECRET}` and compares the
+value in constant time. Set two GitHub Actions repository secrets before the
+first deploy — `APP_URL` (the production origin) and `CRON_SECRET` (matching
+the Vercel environment variable of the same name) — or every call 401s and no
+retry ever runs. The workflow can also be run on demand from the Actions tab
+(`workflow_dispatch`), which is useful for confirming it works before the event.
 
 To look at the rendered emails:
 
