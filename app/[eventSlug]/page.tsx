@@ -7,28 +7,46 @@ import { findCampaign } from '../../lib/db/public-queries';
 import { countryOptions } from '../../lib/i18n/countries';
 import { messagesFor } from '../../lib/i18n/messages';
 import { currentLocale } from '../../lib/i18n/server-locale';
+import { getOperatorSession } from '../../lib/security/operator-session';
 
 // The schedule decides what this page says, so it is never served from a cache.
 export const dynamic = 'force-dynamic';
 
-export default async function EventPage({ params }: { params: Promise<{ eventSlug: string }> }) {
+export default async function EventPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ eventSlug: string }>;
+  searchParams: Promise<{ test?: string }>;
+}) {
   const { eventSlug } = await params;
-  const [campaign, locale] = await Promise.all([findCampaign(eventSlug), currentLocale()]);
+  const [campaign, locale, requestedTest] = await Promise.all([
+    findCampaign(eventSlug),
+    currentLocale(),
+    (async () => (await searchParams).test === '1')(),
+  ]);
   if (!campaign) notFound();
 
   const t = messagesFor(locale);
   const phase = registrationPhase(campaign);
 
+  // `?test=1` only ever does something for a signed-in operator — anyone else
+  // requesting it (including a visitor who stumbled on a shared link) gets
+  // the ordinary page, silently. The claim is re-verified again, server-side,
+  // by `RaffleService` before any entry is actually marked as test.
+  const isTestMode = requestedTest && (await getOperatorSession()) !== null;
+
   return (
     <PageShell locale={locale}>
       <h1 className="sr-only">{campaign.title}</h1>
 
-      {phase === 'open' ? (
+      {phase === 'open' || isTestMode ? (
         <RaffleForm
           eventSlug={eventSlug}
           locale={locale}
           turnstileSiteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? ''}
           countries={countryOptions(locale)}
+          isTestMode={isTestMode}
         />
       ) : (
         <section className="space-y-3">

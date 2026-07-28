@@ -26,6 +26,7 @@ function scheduledCampaign(): Campaign {
     opens_at: '2026-07-27T11:00:00.000Z',
     draw_starts_at: '2026-07-28T12:00:00.000Z',
     next_number: 10000,
+    test_next_number: 900000001,
     terms_version: '2026-07',
     created_at: now.toISOString(),
     updated_at: now.toISOString(),
@@ -192,6 +193,7 @@ function buildService(overrides: {
   turnstile?: { verify: () => Promise<boolean> };
   rateLimiter?: { consume: () => Promise<boolean> };
   clock?: () => Date;
+  verifyOperatorSession?: () => Promise<boolean>;
 } = {}) {
   const clock = overrides.clock ?? (() => now);
   const repository = overrides.repository ?? new MemoryRepository(clock);
@@ -204,6 +206,7 @@ function buildService(overrides: {
     now: clock,
     verificationTokenSecret: 'test-verification-secret',
     receiptTokenSecret: 'test-receipt-secret',
+    verifyOperatorSession: overrides.verifyOperatorSession,
   });
   return { service, repository, mailer };
 }
@@ -407,6 +410,61 @@ describe('RaffleService resend', () => {
 
     expect(repository.tokens).toHaveLength(2);
     expect(mailer.verification[1].token).not.toBe(mailer.verification[0].token);
+  });
+});
+
+describe('RaffleService test mode', () => {
+  it('ignores an isTest claim when the operator session cannot be verified', async () => {
+    const { service, repository } = buildService({ verifyOperatorSession: async () => false });
+    repository.campaign.status = 'CLOSED';
+
+    await expect(
+      service.requestVerification({ ...validRequest, isTest: true }),
+    ).resolves.toEqual({ accepted: false, reason: 'closed' });
+    expect(repository.entries).toHaveLength(0);
+  });
+
+  it('honors isTest only once a real operator session is verified, bypassing the schedule and the rate limit', async () => {
+    const consumed: unknown[] = [];
+    const { service, repository, mailer } = buildService({
+      verifyOperatorSession: async () => true,
+      rateLimiter: {
+        consume: async () => {
+          consumed.push(true);
+          return false; // Would refuse a real request; must not even be asked for a test one.
+        },
+      },
+    });
+    repository.campaign.status = 'CLOSED';
+
+    const result = await service.requestVerification({ ...validRequest, isTest: true });
+
+    expect(result).toEqual({ accepted: true });
+    expect(consumed).toHaveLength(0);
+    expect(repository.entries).toMatchObject([{ is_test: true, state: 'PENDING' }]);
+    expect(mailer.verification).toHaveLength(1);
+  });
+
+  it('does not mark an entry as test when isTest is absent, even with a verified operator session', async () => {
+    const { service, repository } = buildService({ verifyOperatorSession: async () => true });
+
+    await service.requestVerification(validRequest);
+
+    expect(repository.entries).toMatchObject([{ is_test: false }]);
+  });
+
+  it('applies the same verified-session gate to a resend', async () => {
+    const { service, repository } = buildService({ verifyOperatorSession: async () => false });
+    repository.campaign.status = 'CLOSED';
+
+    await expect(
+      service.resendVerification({
+        eventSlug: validRequest.eventSlug,
+        email: validRequest.email,
+        turnstileToken: validRequest.turnstileToken,
+        isTest: true,
+      }),
+    ).resolves.toEqual({ accepted: false, reason: 'closed' });
   });
 });
 

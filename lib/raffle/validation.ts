@@ -60,6 +60,10 @@ export const verificationRequestSchema = z
     dateOfBirth: optionalDate,
     country: optionalText(100),
     region: optionalText(100),
+    // Self-reported, and never trusted on its own — the service re-verifies
+    // an operator session server-side before honoring it. See
+    // `RaffleService.requestVerification`.
+    isTest: z.boolean().optional(),
   })
   .strict();
 
@@ -72,6 +76,7 @@ export const resendRequestSchema = z
     email: emailField,
     turnstileToken: z.string().min(1).max(4096),
     ipAddress: optionalText(64),
+    isTest: z.boolean().optional(),
   })
   .strict();
 

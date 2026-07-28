@@ -11,6 +11,8 @@ export interface Campaign {
   draw_starts_at: string | null;
   status: CampaignStatus;
   next_number: number;
+  /** Counter for test-mode entries — see `is_test` on {@link RaffleEntry}. */
+  test_next_number: number;
   terms_version: string;
   created_at: string;
   updated_at: string;
@@ -39,6 +41,14 @@ export interface RaffleEntry {
   number: number | null;
   verified_at: string | null;
   receipt_token_hash: string | null;
+  /**
+   * Set only by an authenticated operator rehearsing the public flow
+   * (`RaffleService.requestVerification`/`resendVerification` re-verify the
+   * operator session server-side; a client cannot set this on its own).
+   * Issued a number from `campaigns.test_next_number` instead of
+   * `next_number`, and excluded from every admin count and export.
+   */
+  is_test: boolean;
   created_at: string;
   updated_at: string;
 }

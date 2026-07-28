@@ -22,6 +22,7 @@ import {
   type ReceiptJob,
   type VerificationToken,
 } from '../raffle/service';
+import { getOperatorSession } from '../security/operator-session';
 import { TurnstileVerifier } from '../security/turnstile';
 
 // Supabase generated Database types are intentionally introduced with the
@@ -382,5 +383,6 @@ export function getRaffleService(): RaffleService {
     verificationTokenSecret: requiredSecret('VERIFICATION_TOKEN_SECRET'),
     receiptTokenSecret: requiredSecret('RECEIPT_TOKEN_SECRET'),
     onDeliveryError: (error) => console.error('Receipt delivery could not be dispatched', error),
+    verifyOperatorSession: async () => (await getOperatorSession()) !== null,
   });
 }

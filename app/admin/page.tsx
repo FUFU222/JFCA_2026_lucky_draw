@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { AdminShell, StatCard } from '../../components/admin/admin-shell';
@@ -53,6 +54,17 @@ export default async function AdminDashboard() {
           </div>
         </dl>
         <CampaignControls status={campaign.status} drawStartsAt={campaign.draw_starts_at} />
+        <p className="text-sm text-neutral-600">
+          <Link
+            href={`/${campaign.slug}?test=1`}
+            target="_blank"
+            className="font-medium text-neutral-900 underline underline-offset-2"
+          >
+            Open in test mode
+          </Link>{' '}
+          — the real form and emails, but issued a number no draw can win and left out of every
+          count and export.
+        </p>
       </section>
 
       <section className="mt-10 space-y-3">
@@ -68,6 +80,11 @@ export default async function AdminDashboard() {
                 </span>
                 <span className="text-[15px] text-neutral-900">{entry.email}</span>
                 <span className="text-sm text-neutral-500">{entry.state}</span>
+                {entry.is_test && (
+                  <span className="rounded-full bg-[var(--brand-tint)] px-2 py-0.5 text-xs font-semibold text-[var(--brand-accent)]">
+                    TEST
+                  </span>
+                )}
                 <span className="ml-auto font-mono text-xs text-neutral-500">
                   {entry.created_at}
                 </span>

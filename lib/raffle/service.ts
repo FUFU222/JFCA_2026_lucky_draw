@@ -142,6 +142,14 @@ export interface RaffleServiceDependencies {
   onDeliveryError?: (error: unknown) => void;
   /** Defaults come from the environment; tests inject them directly. */
   limits?: { email: number; ip: number };
+  /**
+   * Re-verifies an `isTest` claim against a real, current operator session.
+   * A request that claims test mode without this resolving `true` is always
+   * treated as an ordinary entry — the flag is never trusted on its own.
+   * Omitted in tests that do not exercise test mode, which makes every claim
+   * resolve to `false` by default (fail closed).
+   */
+  verifyOperatorSession?: () => Promise<boolean>;
 }
 
 export class RaffleService {
@@ -164,14 +172,23 @@ export class RaffleService {
       return { accepted: false, reason: 'turnstile' };
     }
 
+    // Never trusted on the client's say-so alone: a claimed `isTest` only
+    // takes effect once a real, current operator session is confirmed here.
+    // Anyone else asking for it silently gets the ordinary flow instead of an
+    // error, so the request behaves exactly like one that never sent the flag.
+    const isTest = request.isTest === true && (await this.verifiedOperatorTestMode());
+
     // The schedule is checked before any allowance is spent, so a visitor who
     // arrives while registration is shut is not also charged their daily quota.
+    // A verified test-mode request is exempt: an operator rehearsing the flow
+    // needs it to work before opening and after closing, not only inside the
+    // window real visitors get.
     const campaign = await this.dependencies.repository.getCampaignBySlug(request.eventSlug);
-    if (!campaign || !isRegistrationOpen(campaign, this.now())) {
+    if (!campaign || (!isTest && !isRegistrationOpen(campaign, this.now()))) {
       return { accepted: false, reason: 'closed' };
     }
 
-    if (!(await this.consumeRequestAllowance(request.eventSlug, request.email, request.ipAddress))) {
+    if (!isTest && !(await this.consumeRequestAllowance(request.eventSlug, request.email, request.ipAddress))) {
       return { accepted: false, reason: 'rate_limited' };
     }
 
@@ -198,6 +215,7 @@ export class RaffleService {
           locale: request.locale,
           terms_version: campaign.terms_version,
           terms_consented_at: this.now().toISOString(),
+          is_test: isTest || existing.is_test,
           // Only fields the visitor supplied this time are written, so a second
           // submission with a blank form never erases an earlier profile.
           ...definedOnly(profile),
@@ -208,6 +226,7 @@ export class RaffleService {
           locale: request.locale,
           terms_version: campaign.terms_version,
           terms_consented_at: this.now().toISOString(),
+          is_test: isTest,
           first_name: profile.first_name ?? null,
           last_name: profile.last_name ?? null,
           phone: profile.phone ?? null,
@@ -235,12 +254,14 @@ export class RaffleService {
       return { accepted: false, reason: 'turnstile' };
     }
 
+    const isTest = request.isTest === true && (await this.verifiedOperatorTestMode());
+
     const campaign = await this.dependencies.repository.getCampaignBySlug(request.eventSlug);
-    if (!campaign || !isRegistrationOpen(campaign, this.now())) {
+    if (!campaign || (!isTest && !isRegistrationOpen(campaign, this.now()))) {
       return { accepted: false, reason: 'closed' };
     }
 
-    if (!(await this.consumeRequestAllowance(request.eventSlug, request.email, request.ipAddress))) {
+    if (!isTest && !(await this.consumeRequestAllowance(request.eventSlug, request.email, request.ipAddress))) {
       return { accepted: false, reason: 'rate_limited' };
     }
 
@@ -285,6 +306,10 @@ export class RaffleService {
     const number = BigInt(confirmed.number);
     await this.trySendReceipt(confirmed, number, receiptToken);
     return { number, receiptToken };
+  }
+
+  private async verifiedOperatorTestMode(): Promise<boolean> {
+    return (await this.dependencies.verifyOperatorSession?.()) ?? false;
   }
 
   private async consumeRequestAllowance(

@@ -76,7 +76,14 @@ export default async function AdminEntriesPage({
           {entries.map((entry) => (
             <tr key={entry.id} className="border-b border-neutral-200">
               <td className="py-2 pr-4 font-mono tabular-nums">{entry.number ?? '—'}</td>
-              <td className="py-2 pr-4">{entry.email}</td>
+              <td className="py-2 pr-4">
+                {entry.email}
+                {entry.is_test && (
+                  <span className="ml-2 rounded-full bg-[var(--brand-tint)] px-2 py-0.5 text-xs font-semibold text-[var(--brand-accent)]">
+                    TEST
+                  </span>
+                )}
+              </td>
               <td className="py-2 pr-4 text-neutral-600">{entry.state}</td>
               <td className="py-2 pr-4 text-neutral-600">{entry.locale}</td>
               <td className="py-2 font-mono text-xs text-neutral-500">{entry.created_at}</td>

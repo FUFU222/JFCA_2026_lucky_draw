@@ -15,6 +15,7 @@ type EntryInput = {
   campaignId: string;
   email: string;
   number?: number;
+  isTest?: boolean;
 };
 
 let supabase: SupabaseClient;
@@ -25,7 +26,7 @@ function uniqueSlug() {
   return `schema-test-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-async function createCampaign() {
+async function createCampaign(overrides: Record<string, unknown> = {}) {
   const { data, error } = await supabase
     .from('campaigns')
     .insert({
@@ -33,8 +34,9 @@ async function createCampaign() {
       title: 'Schema test',
       status: 'DRAFT',
       terms_version: 'test-v1',
+      ...overrides,
     })
-    .select('id, slug')
+    .select('id, slug, next_number, test_next_number')
     .single();
 
   if (error || !data) {
@@ -42,10 +44,15 @@ async function createCampaign() {
   }
 
   testCampaignIds.push(data.id);
-  return data as { id: string; slug: string };
+  return data as {
+    id: string;
+    slug: string;
+    next_number: number;
+    test_next_number: number;
+  };
 }
 
-async function createEntry({ campaignId, email, number }: EntryInput) {
+async function createEntry({ campaignId, email, number, isTest }: EntryInput) {
   const isVerified = number !== undefined;
   const { data, error } = await supabase
     .from('raffle_entries')
@@ -58,6 +65,7 @@ async function createEntry({ campaignId, email, number }: EntryInput) {
       state: isVerified ? 'VERIFIED' : 'PENDING',
       number,
       verified_at: isVerified ? new Date().toISOString() : null,
+      is_test: isTest ?? false,
     })
     .select()
     .single();
@@ -297,6 +305,70 @@ describeWithSupabase('lucky draw schema', () => {
 
     expect(error).toBeNull();
     expect(jobs).toHaveLength(1);
+  });
+
+  it('issues a test entry a number from the separate test counter, leaving next_number untouched', async () => {
+    const campaign = await createCampaign();
+    const entry = await createEntry({
+      campaignId: campaign.id,
+      email: 'test-mode@example.com',
+      isTest: true,
+    });
+    const tokenHash = await createVerificationToken(
+      entry.id,
+      new Date(Date.now() + 60_000).toISOString(),
+    );
+
+    const assigned = await callRpc<number>('confirm_raffle_verification', {
+      p_token_hash: tokenHash,
+      p_receipt_token_hash: `receipt-${uniqueSlug()}`,
+      p_event_slug: campaign.slug,
+    });
+
+    expect(assigned).toBe(900_000_001);
+
+    const { data: after, error } = await supabase
+      .from('campaigns')
+      .select('next_number, test_next_number')
+      .eq('id', campaign.id)
+      .single();
+
+    expect(error).toBeNull();
+    expect(after?.next_number).toBe(campaign.next_number);
+    expect(after?.test_next_number).toBe(900_000_002);
+  });
+
+  it('lets a test entry confirm after the campaign is closed, unlike a real one', async () => {
+    const campaign = await createCampaign({ status: 'CLOSED' });
+
+    const realEntry = await createEntry({ campaignId: campaign.id, email: 'closed-real@example.com' });
+    const realToken = await createVerificationToken(
+      realEntry.id,
+      new Date(Date.now() + 60_000).toISOString(),
+    );
+    const realError = await rpcError('confirm_raffle_verification', {
+      p_token_hash: realToken,
+      p_receipt_token_hash: `receipt-${uniqueSlug()}`,
+      p_event_slug: campaign.slug,
+    });
+    expect(realError?.code).toBe('RD001');
+
+    const testEntry = await createEntry({
+      campaignId: campaign.id,
+      email: 'closed-test@example.com',
+      isTest: true,
+    });
+    const testToken = await createVerificationToken(
+      testEntry.id,
+      new Date(Date.now() + 60_000).toISOString(),
+    );
+    const assigned = await callRpc<number>('confirm_raffle_verification', {
+      p_token_hash: testToken,
+      p_receipt_token_hash: `receipt-${uniqueSlug()}`,
+      p_event_slug: campaign.slug,
+    });
+
+    expect(assigned).toBe(900_000_001);
   });
 
   it('increments a verification send only once under concurrency', async () => {

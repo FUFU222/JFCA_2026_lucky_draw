@@ -21,6 +21,7 @@ export interface EntrySummary {
   locale: string;
   created_at: string;
   verified_at: string | null;
+  is_test: boolean;
 }
 
 export interface FailedDelivery {
@@ -31,12 +32,20 @@ export interface FailedDelivery {
   attemptedAt: string;
 }
 
+/**
+ * `is_test` rows are excluded here — and in every export/count below — so a
+ * rehearsal run by an operator never inflates the numbers a real decision
+ * gets made from. They still show up in {@link searchEntries} and the
+ * dashboard's recent-entries list, badged, so an operator can confirm their
+ * own test run actually worked.
+ */
 async function countEntries(campaignId: string, state: 'PENDING' | 'VERIFIED') {
   const { count, error } = await createServiceRoleClient()
     .from('raffle_entries')
     .select('id', { count: 'exact', head: true })
     .eq('campaign_id', campaignId)
-    .eq('state', state);
+    .eq('state', state)
+    .eq('is_test', false);
   if (error) throw error;
   return count ?? 0;
 }
@@ -57,7 +66,7 @@ export async function loadDashboard(slug: string): Promise<DashboardSummary | nu
     countEntries(campaignId, 'PENDING'),
     client
       .from('raffle_entries')
-      .select('id, email, state, number, locale, created_at, verified_at')
+      .select('id, email, state, number, locale, created_at, verified_at, is_test')
       .eq('campaign_id', campaignId)
       .order('created_at', { ascending: false })
       .limit(10),
@@ -114,7 +123,7 @@ export async function searchEntries({
 }: EntrySearch): Promise<EntrySummary[]> {
   let request = createServiceRoleClient()
     .from('raffle_entries')
-    .select('id, email, state, number, locale, created_at, verified_at')
+    .select('id, email, state, number, locale, created_at, verified_at, is_test')
     .eq('campaign_id', campaignId)
     .order('created_at', { ascending: false })
     .limit(limit);
@@ -158,6 +167,7 @@ export async function* exportEntryPages(
       .from('raffle_entries')
       .select(EXPORT_COLUMNS)
       .eq('campaign_id', campaignId)
+      .eq('is_test', false)
       // Ordered by a unique column so pages cannot overlap or skip a row.
       .order('created_at', { ascending: true })
       .order('id', { ascending: true })
@@ -174,7 +184,8 @@ export async function countEntriesForExport(campaignId: string): Promise<number>
   const { count, error } = await createServiceRoleClient()
     .from('raffle_entries')
     .select('id', { count: 'exact', head: true })
-    .eq('campaign_id', campaignId);
+    .eq('campaign_id', campaignId)
+    .eq('is_test', false);
   if (error) throw error;
   return count ?? 0;
 }

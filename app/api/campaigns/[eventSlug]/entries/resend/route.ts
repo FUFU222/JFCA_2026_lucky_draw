@@ -23,6 +23,7 @@ export async function POST(request: Request, context: { params: Promise<{ eventS
     email: body.email,
     turnstileToken: body.turnstile_token,
     ipAddress: clientIpAddress(request),
+    isTest: body.is_test,
   });
 
   return raffleRequestResponse(result);

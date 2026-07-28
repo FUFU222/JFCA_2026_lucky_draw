@@ -60,6 +60,13 @@ export interface RaffleFormProps {
    * make the markup differ from what was sent and break hydration.
    */
   countries: readonly CountryOption[];
+  /**
+   * Set only by the server after re-checking an operator session for `?test=1`
+   * (see `app/[eventSlug]/page.tsx`). Marks every request this form makes as
+   * test mode; the server re-verifies that claim independently before
+   * honoring it, so this prop alone never grants anything.
+   */
+  isTestMode?: boolean;
 }
 
 type Status = 'editing' | 'sending' | 'submitted';
@@ -70,6 +77,7 @@ export function RaffleForm({
   locale,
   turnstileSiteKey,
   countries,
+  isTestMode = false,
 }: RaffleFormProps) {
   const t = messagesFor(locale).form;
   const submitted = messagesFor(locale).submitted;
@@ -161,6 +169,7 @@ export function RaffleForm({
       country: draft.country,
       region: draft.region,
       turnstile_token: captchaToken,
+      is_test: isTestMode,
     });
 
     if (!accepted) return;
@@ -180,6 +189,7 @@ export function RaffleForm({
     const accepted = await post(`/api/campaigns/${eventSlug}/entries/resend`, {
       email: draft.email.trim(),
       turnstile_token: captchaToken,
+      is_test: isTestMode,
     });
     setStatus('submitted');
     if (accepted) setResendNote(submitted.resendDone);
@@ -187,7 +197,9 @@ export function RaffleForm({
 
   if (screen === 'submitted') {
     return (
-      <section className="space-y-4">
+      <>
+        {isTestMode && <TestModeBanner />}
+        <section className="space-y-4">
         <h2 className="text-2xl font-bold text-neutral-900">{submitted.heading}</h2>
         <p className="text-[15px] leading-relaxed text-neutral-700">{submitted.body}</p>
         <p className="rounded-lg bg-neutral-100 px-4 py-3 text-sm text-neutral-600">
@@ -237,12 +249,15 @@ export function RaffleForm({
           <p className="font-semibold break-all text-neutral-900">{draft.email.trim()}</p>
           <p>{submitted.resendDialogHint}</p>
         </ConfirmationDialog>
-      </section>
+        </section>
+      </>
     );
   }
 
   return (
-    <form
+    <>
+      {isTestMode && <TestModeBanner />}
+      <form
       noValidate
       onSubmit={(event) => {
         event.preventDefault();
@@ -426,7 +441,23 @@ export function RaffleForm({
         <p className="font-semibold break-all text-neutral-900">{draft.email.trim()}</p>
         <p>{sendDialog.hint}</p>
       </ConfirmationDialog>
-    </form>
+      </form>
+    </>
+  );
+}
+
+/**
+ * Deliberately loud: an operator rehearsing the flow, or anyone who later
+ * sees a screenshot of it, must never mistake this for a real entry.
+ */
+function TestModeBanner() {
+  return (
+    <div
+      role="status"
+      className="mb-6 rounded-lg border-2 border-dashed border-[var(--brand-accent)] bg-[var(--brand-tint)] px-4 py-3 text-sm font-semibold text-[var(--brand-accent)]"
+    >
+      Test mode — this entry will not count toward the draw.
+    </div>
   );
 }
 

@@ -29,6 +29,7 @@ export async function POST(request: Request, context: { params: Promise<{ eventS
     dateOfBirth: body.date_of_birth,
     country: body.country,
     region: body.region,
+    isTest: body.is_test,
   });
 
   return raffleRequestResponse(result);

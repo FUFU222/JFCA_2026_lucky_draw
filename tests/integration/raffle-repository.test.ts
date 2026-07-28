@@ -185,6 +185,7 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
       locale: 'en',
       terms_version: 'repo-test-v1',
       terms_consented_at: new Date().toISOString(),
+      is_test: false,
       first_name: null,
       last_name: null,
       phone: null,
