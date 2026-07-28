@@ -6,7 +6,7 @@
 - Active implementation worktree: `/Users/fufu/code/JFCA2026_lucky_draw/.worktrees/lucky-draw`
 - Branch: `codex/lucky-draw`
 - Do **not** work directly on `main`. `main` contains only the documented baseline.
-- The working tree is clean. Tasks 1–5 are committed.
+- The working tree is clean. Tasks 1–6 are committed.
 
 ## Product decisions (authoritative)
 
@@ -31,6 +31,7 @@ The full service design is [design.md](/Users/fufu/Downloads/design.md). The imp
 | 3. Numbers, tokens, validation, rate-limit abstraction | Complete |
 | 4. Registration / resend / confirmation services and routes | Complete, reviewed, committed |
 | 5. Email templates, Resend adapter, outbox retry worker, log mode | Complete, committed |
+| 6. Bilingual public pages, confirmation dialogs, Turnstile, terms | Complete, committed |
 
 Commits added in session 2:
 
@@ -40,6 +41,7 @@ Commits added in session 2:
 - `230f7b5` `feat: add raffle email templates and durable delivery`
 - `275d43d` `fix: fail a misconfigured deployment at boot, not at first message`
 - `2cce897` `fix: retire outbox work that no retry could ever deliver`
+- `95eacb9` `feat: build the public raffle experience`
 
 ### What session 2 found in "reviewed" Task 2 work
 
@@ -93,8 +95,8 @@ Properties that are enforced rather than assumed:
 
 ## Test suites
 
-122 tests, all passing, plus one Playwright smoke test. The suite was run
-five times to confirm it is not order-dependent.
+145 unit and integration tests, plus 6 Playwright specs covering the public
+journey end to end. All passing.
 
 - `tests/unit/*` — numbers, tokens, validation, rate limiter, campaign config.
 - `tests/integration/schema.test.ts` — tables, constraints, and every RPC,
@@ -111,6 +113,12 @@ five times to confirm it is not order-dependent.
   selection and the boot-time configuration check.
 - `tests/integration/email-outbox.test.ts`,
   `tests/integration/email-outbox-route.test.ts` — the worker and its endpoint.
+- `tests/unit/confirmation-dialog.test.tsx` — focus, Escape, Tab trapping, and
+  that the action button names the action.
+- `tests/unit/raffle-form.test.tsx` — field order, required inputs, the captcha
+  gate, draft recovery, and both dialogs.
+- `e2e/public-journey.spec.ts` — the real form in both languages, the two-step
+  confirmation, the number page, a used link, and an expired link.
 
 `vitest.config.ts` sets `fileParallelism: false`: the integration suites share
 one database and the global outbox claim will lease another file's job.
@@ -142,14 +150,48 @@ allowance is therefore spent on the *message*, not on the attempt.
 deprecated because react-email 6 exports the components and the renderer from
 the package already in use.
 
+## Task 6 as delivered
+
+- `app/[eventSlug]/` — entry form, `terms`, `verify/[token]`, `number/[token]`.
+  `app/page.tsx` forwards the bare domain to the active event.
+- `components/public/` — form, locale switcher, Turnstile widget, verification
+  confirmation, number receipt, page shell.
+- `components/ui/confirmation-dialog.tsx` — the one dialog used in front of both
+  irreversible actions.
+- `lib/i18n/` — every visitor-facing string, the locale cookie, and the country
+  list. `lib/campaign/legal.ts` holds the versioned terms.
+
+Properties worth keeping:
+
+- A GET of the verification link never mutates. `verificationLinkState` only
+  reads; the number is issued by the POST behind the visitor's action.
+- The country options are resolved on the server. Node's ICU data and the
+  browser's disagree, and recomputing them client-side broke hydration.
+- The draft is restored after mount, not during the first render, for the same
+  reason. The locale is a cookie so the server renders the right language
+  immediately.
+- The receipt page renders the number and nothing else — no profile editing and
+  no statement about winning.
+
+### What Task 6 uncovered in earlier work
+
+- **Tailwind had never been wired up.** `@tailwindcss/postcss` and
+  `postcss.config.mjs` were missing since Task 1. With no UI in the repo, every
+  check passed and the styles simply did nothing.
+- **Testing Library's automatic cleanup was not running**, because it only
+  registers itself when Vitest globals are enabled. `tests/setup.ts` now calls
+  `cleanup` in an `afterEach`.
+
 ## Known gaps, deliberately deferred
 
-1. **The emailed links point at pages that do not exist yet.** The mailer builds
-   `/{eventSlug}/verify/{token}` and `/{eventSlug}/number/{token}`; Task 6 builds
-   those pages. **Do not send real mail before then.**
-2. **`/entries/resend` with an expired token returns the generic 202 and sends
-   nothing.** That matches the spec (a re-application issues a new link, a resend
-   does not), but Task 6 must tell the visitor to submit the form again.
+1. **The Lucky Draw terms still need legal sign-off.** `lib/campaign/legal.ts`
+   states the clauses the service design specifies, under the version
+   `jfca-2026-terms-v1-placeholder`. When the final wording lands, bump that
+   version and `supabase/seed.sql` together so a recorded consent always points
+   at the text that was shown.
+2. **A resend after the link expired sends nothing** and the acknowledgement
+   page does not yet say "submit the form again". The service behaviour matches
+   the spec; the wording gap is real.
 3. **The per-IP limit trusts `x-real-ip` / `x-forwarded-for`.** Confirm in Task 8
    that the deployment edge overwrites both; if it does not, the limit is
    bypassable.
@@ -159,14 +201,15 @@ the package already in use.
 5. **Confirmation is refused once `draw_starts_at` passes or the campaign is
    `CLOSED`.** Decided in session 2 and confirmed by the operator. `PAUSED`
    deliberately does **not** block confirmation, because pausing is about intake.
-6. **Cron reliability is unverified.** `vercel.json` and `CRON_SECRET` are only
+6. **The E2E suite needs `.env.local`** and skips without it, so CI does not run
+   it yet. Task 8 should decide whether CI gets its own Turnstile test key and
+   Supabase stack for the browser journey.
+7. **Cron reliability is unverified.** `vercel.json` and `CRON_SECRET` are only
    exercised by unit tests; Task 8 must confirm the schedule actually fires in
    the deployed project.
 
-## Remaining plan (Task 5 is done)
+## Remaining plan (Tasks 5 and 6 are done)
 
-6. Bilingual public registration/verification/receipt pages, session draft,
-   Turnstile UI, required confirmation dialog, terms/privacy links, public E2E.
 7. `@chairman.jp` Supabase magic-link administration, dashboard, search, CSV
    export/audit, pause/resume confirmation, admin E2E.
 8. Vercel/Supabase/Resend/Turnstile operational docs, load test, Toronto QR/TLS
