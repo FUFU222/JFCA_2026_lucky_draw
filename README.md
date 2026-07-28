@@ -150,6 +150,8 @@ Two documents own the deployment:
 - [docs/operations/prelaunch-checklist.md](docs/operations/prelaunch-checklist.md)
   — Supabase, Resend, Turnstile, Vercel, the legal wording, the event schedule,
   and the manual checks that must pass **before the QR code is printed**.
+- [docs/operations/staging.md](docs/operations/staging.md) — how staging is
+  configured so nothing real can be sent, and how to run the load test.
 - [docs/operations/on-site-runbook.md](docs/operations/on-site-runbook.md) —
   what the operator does at the venue, including the one thing most likely to
   surprise them: a shared venue network makes many visitors look like one IP.

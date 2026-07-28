@@ -1,5 +1,8 @@
 # Lucky Draw pre-launch checklist
 
+Set staging up first — see [staging.md](staging.md). It is the only place the
+load test and a full dry run can happen without sending real mail.
+
 Work top to bottom. Nothing below the QR line may be skipped: once a code is
 printed, the URL it points at cannot be changed.
 
