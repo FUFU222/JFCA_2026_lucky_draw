@@ -1,7 +1,12 @@
 export type CampaignStatus = 'DRAFT' | 'SCHEDULED' | 'PAUSED' | 'CLOSED';
 
 export type EntryState = 'PENDING' | 'VERIFIED';
-export type EntryLocale = 'en' | 'ja';
+/**
+ * The public side is English-only; the column and this type stay because the
+ * admin CSV export and the entries table still show it, and narrowing the DB
+ * constraint (rather than dropping the column) is the lower-risk change.
+ */
+export type EntryLocale = 'en';
 
 export interface Campaign {
   id: string;

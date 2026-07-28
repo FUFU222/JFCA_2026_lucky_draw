@@ -1,49 +1,32 @@
 import { Body, Container, Head, Heading, Html, Img, Link, Preview, Section, Text } from 'react-email';
 
-import { emailStyles, type EmailLocale } from './styles';
+import { emailStyles } from './styles';
 import { LOGO_ALT, logoUrl } from './logo';
 
 const copy = {
-  en: {
-    preview: 'Confirm your email to receive your Lucky Draw number',
-    heading: 'Confirm your email address',
-    intro:
-      'Thank you for entering the LIVAPON Lucky Draw. Confirm this address to receive your Lucky Draw number.',
-    action: 'Confirm my email address',
-    expiry: 'This link works for 24 hours. After that, submit the entry form again to get a new one.',
-    fallback: 'If the button does not work, open this address in your browser:',
-    ignore: 'If you did not enter the Lucky Draw, you can ignore this message.',
-    contact: 'Questions:',
-    operator: 'LIVAPON is operated by CHAIRMAN Inc.',
-    why: 'You are receiving this because this address was entered into the Lucky Draw at Japan Festival Canada 2026.',
-  },
-  ja: {
-    preview: '抽選番号を受け取るにはメールアドレスの確認が必要です',
-    heading: 'メールアドレスをご確認ください',
-    intro:
-      'LIVAPON Lucky Draw へのご応募ありがとうございます。抽選番号をお受け取りいただくため、下のボタンからメールアドレスのご確認をお願いします。',
-    action: 'メールアドレスを確認する',
-    expiry:
-      'このリンクは24時間有効です。期限を過ぎた場合は、応募フォームからあらためてご応募ください。',
-    fallback: 'ボタンが動作しない場合は、次のアドレスをブラウザで開いてください。',
-    ignore: 'お心当たりがない場合は、このメールを破棄してください。',
-    contact: 'お問い合わせ先:',
-    operator: 'LIVAPON は株式会社CHAIRMAN が運営しています。',
-    why: 'このメールは、Japan Festival Canada 2026 の Lucky Draw にこのアドレスでご応募いただいたためお送りしています。',
-  },
+  preview: 'Confirm your email to receive your Lucky Draw number',
+  heading: 'Confirm your email address',
+  intro:
+    'Thank you for entering the LIVAPON Lucky Draw. Confirm this address to receive your Lucky Draw number.',
+  action: 'Confirm my email address',
+  expiry: 'This link works for 24 hours. After that, submit the entry form again to get a new one.',
+  fallback: 'If the button does not work, open this address in your browser:',
+  ignore: 'If you did not enter the Lucky Draw, you can ignore this message.',
+  contact: 'Questions:',
+  operator: 'LIVAPON is operated by CHAIRMAN Inc.',
+  why: 'You are receiving this because this address was entered into the Lucky Draw at Japan Festival Canada 2026.',
 } as const;
 
 export interface VerificationEmailProps {
-  locale: EmailLocale;
   verificationUrl: string;
   supportEmail: string;
 }
 
-export function VerificationEmail({ locale, verificationUrl, supportEmail }: VerificationEmailProps) {
-  const t = copy[locale];
+export function VerificationEmail({ verificationUrl, supportEmail }: VerificationEmailProps) {
+  const t = copy;
 
   return (
-    <Html lang={locale}>
+    <Html lang="en">
       <Head />
       <Preview>{t.preview}</Preview>
       <Body style={emailStyles.body}>
@@ -87,7 +70,6 @@ export function VerificationEmail({ locale, verificationUrl, supportEmail }: Ver
 
 // Sample data for `pnpm email:preview` and `pnpm email:export`.
 VerificationEmail.PreviewProps = {
-  locale: 'en',
   verificationUrl: 'https://luckydraw.livapon.com/jfca-2026/verify/preview-token',
   supportEmail: 'info@chairman.jp',
 } satisfies VerificationEmailProps;

@@ -25,7 +25,6 @@ function receiptTokenFor(tokenId: string) {
 function context(overrides: Partial<OutboxEntryContext> = {}): OutboxEntryContext {
   return {
     email: 'person@example.com',
-    locale: 'en',
     campaignSlug: 'jfca-2026',
     number: BigInt(10_000),
     receiptTokenHash: hashToken(receiptTokenFor(ACTIVE_TOKEN_ID)),
@@ -145,7 +144,6 @@ describe('EmailOutboxProcessor', () => {
         email: 'person@example.com',
         token: deriveVerificationToken(ACTIVE_TOKEN_ID, VERIFICATION_SECRET),
         eventSlug: 'jfca-2026',
-        locale: 'en',
       },
     ]);
   });

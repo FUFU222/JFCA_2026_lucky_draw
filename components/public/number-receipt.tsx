@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 
 import { SUPPORT_EMAIL } from '../../lib/campaign/legal';
-import { messagesFor, type Locale } from '../../lib/i18n/messages';
+import { messages } from '../../lib/i18n/messages';
 import { formatRaffleNumber } from '../../lib/raffle/number';
 
 /**
@@ -24,8 +24,8 @@ const CONFETTI: Array<{ left: string; color: string; tx: string; ty: string; rot
  * thing sized to be read across a crowded hall. No profile editing, and no
  * statement about whether the entry has won.
  */
-export function NumberReceipt({ number, locale }: { number: bigint; locale: Locale }) {
-  const t = messagesFor(locale).receipt;
+export function NumberReceipt({ number }: { number: bigint }) {
+  const t = messages.receipt;
 
   return (
     <section className="space-y-6">

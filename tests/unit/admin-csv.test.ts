@@ -42,7 +42,7 @@ describe('entriesToCsv', () => {
     email: 'person@example.com',
     state: 'VERIFIED',
     verified_at: '2026-07-28T01:00:00.000Z',
-    locale: 'ja',
+    locale: 'en',
     terms_version: 'jfca-2026-terms-v1-placeholder',
     terms_consented_at: '2026-07-28T00:59:00.000Z',
     first_name: 'Ada',

@@ -56,7 +56,6 @@ export interface ReceiptJob {
 export interface ConfirmedVerification {
   entryId: string;
   email: string;
-  locale: 'en' | 'ja';
   campaignSlug: string;
   number: bigint | number | string;
 }
@@ -108,14 +107,12 @@ export interface RaffleMailer {
     eventSlug: string;
     email: string;
     token: string;
-    locale: 'en' | 'ja';
   }): Promise<{ id?: string }>;
   sendReceipt(input: {
     eventSlug: string;
     email: string;
     number: bigint;
     receiptToken: string;
-    locale: 'en' | 'ja';
   }): Promise<{ id?: string }>;
 }
 
@@ -212,7 +209,7 @@ export class RaffleService {
 
     const entry = existing
       ? await this.dependencies.repository.updatePendingEntry(existing.id, {
-          locale: request.locale,
+          locale: 'en',
           terms_version: campaign.terms_version,
           terms_consented_at: this.now().toISOString(),
           is_test: isTest || existing.is_test,
@@ -223,7 +220,7 @@ export class RaffleService {
       : await this.dependencies.repository.createPendingEntry({
           campaign_id: campaign.id,
           email: request.email,
-          locale: request.locale,
+          locale: 'en',
           terms_version: campaign.terms_version,
           terms_consented_at: this.now().toISOString(),
           is_test: isTest,
@@ -383,7 +380,6 @@ export class RaffleService {
         eventSlug,
         email: entry.email,
         token: deriveVerificationToken(token.id, this.dependencies.verificationTokenSecret),
-        locale: entry.locale,
       });
       // A copy an earlier failure queued is now redundant; leaving it would send
       // the same link a second time.
@@ -414,7 +410,7 @@ export class RaffleService {
     number: bigint,
     receiptToken: string,
   ): Promise<void> {
-    const { entryId, email, locale, campaignSlug } = confirmed;
+    const { entryId, email, campaignSlug } = confirmed;
     // The number is already durable, so a receipt that cannot be sent now stays
     // a retryable outbox job rather than failing the confirmation.
     try {
@@ -433,7 +429,6 @@ export class RaffleService {
           email,
           number,
           receiptToken,
-          locale,
         });
         providerMessageId = result.id ?? null;
       } catch (error) {

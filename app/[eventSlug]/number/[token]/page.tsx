@@ -4,8 +4,7 @@ import { NumberReceipt } from '../../../../components/public/number-receipt';
 import { PageShell } from '../../../../components/public/page-shell';
 import { SUPPORT_EMAIL } from '../../../../lib/campaign/legal';
 import { findCampaign, findReceipt } from '../../../../lib/db/public-queries';
-import { messagesFor } from '../../../../lib/i18n/messages';
-import { currentLocale } from '../../../../lib/i18n/server-locale';
+import { messages } from '../../../../lib/i18n/messages';
 
 // The receipt is looked up per request and never cached at the edge: the token
 // is a bearer credential and its page is personal.
@@ -17,19 +16,19 @@ export default async function NumberPage({
   params: Promise<{ eventSlug: string; token: string }>;
 }) {
   const { eventSlug, token } = await params;
-  const [campaign, locale] = await Promise.all([findCampaign(eventSlug), currentLocale()]);
+  const campaign = await findCampaign(eventSlug);
   if (!campaign) notFound();
 
   const receipt = await findReceipt(eventSlug, token);
   // A missing receipt is a real 404: a soft one invites indexing of a page
   // whose URL is a bearer token.
   if (!receipt) notFound();
-  const t = messagesFor(locale).receipt;
+  const t = messages.receipt;
 
   return (
-    <PageShell locale={locale}>
+    <PageShell>
       {receipt ? (
-        <NumberReceipt number={receipt.number} locale={locale} />
+        <NumberReceipt number={receipt.number} />
       ) : (
         <section className="space-y-4">
           <h1 className="text-2xl font-bold text-neutral-900">{t.notFoundHeading}</h1>

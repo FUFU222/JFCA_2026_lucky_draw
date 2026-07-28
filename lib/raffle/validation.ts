@@ -35,7 +35,7 @@ export const registrationSchema = z
     date_of_birth: optionalDate,
     country: optionalText(100),
     region: optionalText(100),
-    locale: z.enum(['en', 'ja']),
+    locale: z.literal('en'),
   })
   .strict();
 
@@ -49,7 +49,6 @@ export const verificationRequestSchema = z
   .object({
     eventSlug: z.string().min(1).max(100),
     email: emailField,
-    locale: z.enum(['en', 'ja']),
     termsConsent: z.literal(true),
     turnstileToken: z.string().min(1).max(4096),
     ipAddress: optionalText(64),

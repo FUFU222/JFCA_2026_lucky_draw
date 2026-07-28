@@ -1,5 +1,3 @@
-import type { Locale } from './messages';
-
 export const DEFAULT_COUNTRY = 'CA';
 
 /**
@@ -31,16 +29,16 @@ export interface CountryOption {
  * Names come from the platform's own locale data, so nothing here has to hold a
  * hand-maintained translation of two hundred country names.
  */
-export function countryOptions(locale: Locale): CountryOption[] {
-  const display = new Intl.DisplayNames([locale], { type: 'region', fallback: 'code' });
-  const collator = new Intl.Collator(locale);
+export function countryOptions(): CountryOption[] {
+  const display = new Intl.DisplayNames(['en'], { type: 'region', fallback: 'code' });
+  const collator = new Intl.Collator('en');
 
   return COUNTRY_CODES.map((code) => ({ code, name: display.of(code) ?? code })).sort((a, b) =>
     collator.compare(a.name, b.name),
   );
 }
 
-export function countryName(code: string | null | undefined, locale: Locale): string | null {
+export function countryName(code: string | null | undefined): string | null {
   if (!code) return null;
-  return new Intl.DisplayNames([locale], { type: 'region', fallback: 'code' }).of(code) ?? code;
+  return new Intl.DisplayNames(['en'], { type: 'region', fallback: 'code' }).of(code) ?? code;
 }

@@ -51,8 +51,7 @@ the server log, which is how you walk the journey on staging without a mailbox.
 3. Find the link in the Vercel runtime logs — the line starts `[mail:log]`.
 4. Open it, confirm, and check the number page renders.
 5. Open the same link again. It must say the link cannot be used.
-6. Switch to Japanese and repeat. Both languages must be complete.
-7. Sign in at `/admin/login` and check the entry appears, then export the CSV
+6. Sign in at `/admin/login` and check the entry appears, then export the CSV
    and open it in Excel.
 
 ## Load test

@@ -125,7 +125,6 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
       service.requestVerification({
         eventSlug: campaign.slug,
         email: email.toUpperCase(),
-        locale: 'ja',
         termsConsent: true,
         turnstileToken: 'captcha',
         ipAddress: '203.0.113.10',
@@ -144,7 +143,7 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
     expect(entry).toMatchObject({
       email,
       state: 'PENDING',
-      locale: 'ja',
+      locale: 'en',
       first_name: 'Ada',
       region: 'Ontario',
     });
@@ -212,7 +211,6 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
     await service.requestVerification({
       eventSlug: campaign.slug,
       email: `concurrent-${uniqueSuffix()}@example.com`,
-      locale: 'en',
       termsConsent: true,
       turnstileToken: 'captcha',
     });
@@ -242,7 +240,6 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
     await service.requestVerification({
       eventSlug: campaign.slug,
       email: `failed-${uniqueSuffix()}@example.com`,
-      locale: 'en',
       termsConsent: true,
       turnstileToken: 'captcha',
     });
@@ -286,7 +283,6 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
     const request = {
       eventSlug: campaign.slug,
       email,
-      locale: 'en' as const,
       termsConsent: true as const,
       turnstileToken: 'captcha',
     };
@@ -316,7 +312,6 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
     await service.requestVerification({
       eventSlug: campaign.slug,
       email: `slug-${uniqueSuffix()}@example.com`,
-      locale: 'en',
       termsConsent: true,
       turnstileToken: 'captcha',
     });
@@ -356,7 +351,6 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
     await service.requestVerification({
       eventSlug: campaign.slug,
       email: `late-${uniqueSuffix()}@example.com`,
-      locale: 'en',
       termsConsent: true,
       turnstileToken: 'captcha',
     });
@@ -382,7 +376,6 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
     const request = {
       eventSlug: campaign.slug,
       email,
-      locale: 'en' as const,
       termsConsent: true as const,
       turnstileToken: 'captcha',
     };
@@ -417,7 +410,6 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
     const request = {
       eventSlug: campaign.slug,
       email: `race-${uniqueSuffix()}@example.com`,
-      locale: 'en' as const,
       termsConsent: true as const,
       turnstileToken: 'captcha',
     };
@@ -446,7 +438,6 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
       service.requestVerification({
         eventSlug: campaign.slug,
         email: `retry-${uniqueSuffix()}@example.com`,
-        locale: 'en',
         termsConsent: true,
         turnstileToken: 'captcha',
       }),
@@ -496,7 +487,6 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
     await service.requestVerification({
       eventSlug: campaign.slug,
       email: `receipt-retry-${uniqueSuffix()}@example.com`,
-      locale: 'ja',
       termsConsent: true,
       turnstileToken: 'captcha',
     });
@@ -543,7 +533,6 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
     await service.requestVerification({
       eventSlug: campaign.slug,
       email: `armed-${uniqueSuffix()}@example.com`,
-      locale: 'en',
       termsConsent: true,
       turnstileToken: 'captcha',
     });

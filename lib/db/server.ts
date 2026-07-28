@@ -191,7 +191,7 @@ export class SupabaseRaffleRepository implements RaffleRepository {
 
     const { data: entry, error: entryError } = await this.client
       .from('raffle_entries')
-      .select('id, email, locale, number, campaigns!inner(slug)')
+      .select('id, email, number, campaigns!inner(slug)')
       .eq('receipt_token_hash', receiptTokenHash)
       .single();
     if (entryError || !entry) throw entryError ?? new Error('Confirmed entry was not found');
@@ -200,7 +200,6 @@ export class SupabaseRaffleRepository implements RaffleRepository {
     return {
       entryId: entry.id,
       email: entry.email,
-      locale: entry.locale,
       campaignSlug: Array.isArray(campaign) ? campaign[0].slug : campaign.slug,
       number: data as string | number,
     };
@@ -300,7 +299,7 @@ export class SupabaseOutboxRepository implements OutboxRepository {
   async getEntryContext(entryId: string): Promise<OutboxEntryContext | null> {
     const { data: entry, error } = await this.client
       .from('raffle_entries')
-      .select('email, locale, number, receipt_token_hash, campaigns!inner(slug)')
+      .select('email, number, receipt_token_hash, campaigns!inner(slug)')
       .eq('id', entryId)
       .maybeSingle();
     if (error) throw error;
@@ -325,7 +324,6 @@ export class SupabaseOutboxRepository implements OutboxRepository {
 
     return {
       email: entry.email,
-      locale: entry.locale,
       campaignSlug: Array.isArray(campaign) ? campaign[0].slug : campaign.slug,
       number: entry.number === null ? null : BigInt(entry.number),
       receiptTokenHash: entry.receipt_token_hash,

@@ -22,7 +22,7 @@ describe('registrationSchema', () => {
     date_of_birth: '1815-12-10',
     country: 'Canada',
     region: 'Ontario',
-    locale: 'ja',
+    locale: 'en',
   };
 
   it('accepts a consented registration with the supported optional profile fields', () => {
@@ -46,7 +46,8 @@ describe('registrationSchema', () => {
     );
   });
 
-  it('allows only English or Japanese locales', () => {
+  it('allows only the English locale', () => {
+    expect(registrationSchema.safeParse({ ...registration, locale: 'ja' }).success).toBe(false);
     expect(registrationSchema.safeParse({ ...registration, locale: 'fr' }).success).toBe(false);
   });
 

@@ -25,12 +25,7 @@ function stubTurnstile({ solve = true }: { solve?: boolean } = {}) {
 
 function renderForm() {
   return render(
-    <RaffleForm
-      eventSlug="jfca-2026"
-      locale="en"
-      turnstileSiteKey="site-key"
-      countries={countryOptions('en')}
-    />,
+    <RaffleForm eventSlug="jfca-2026" turnstileSiteKey="site-key" countries={countryOptions()} />,
   );
 }
 
@@ -175,7 +170,6 @@ describe('sending', () => {
     expect(JSON.parse((init as RequestInit).body as string)).toMatchObject({
       email: 'person@example.com',
       terms_consent: true,
-      locale: 'en',
       country: 'CA',
       turnstile_token: CAPTCHA_TOKEN,
     });

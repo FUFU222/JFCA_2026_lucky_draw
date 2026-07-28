@@ -18,7 +18,6 @@ export async function POST(request: Request, context: { params: Promise<{ eventS
   const result = await getRaffleService().requestVerification({
     eventSlug,
     email: body.email,
-    locale: body.locale,
     termsConsent: body.terms_consent,
     turnstileToken: body.turnstile_token,
     ipAddress: clientIpAddress(request),

@@ -31,7 +31,6 @@ function post(path: string, body: unknown, headers: Record<string, string> = {})
 const validEntryBody = {
   email: 'PERSON@example.com',
   terms_consent: true,
-  locale: 'en',
   turnstile_token: 'captcha',
 };
 
@@ -55,7 +54,6 @@ describe('entry route', () => {
     expect(service.requestVerification).toHaveBeenCalledWith({
       eventSlug: 'jfca-2026',
       email: 'PERSON@example.com',
-      locale: 'en',
       termsConsent: true,
       turnstileToken: 'captcha',
       // Only the client address is taken from the proxy chain.

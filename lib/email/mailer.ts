@@ -48,12 +48,10 @@ export class LoggingRaffleMailer implements RaffleMailer {
     eventSlug: string;
     email: string;
     token: string;
-    locale: 'en' | 'ja';
   }): Promise<{ id?: string }> {
     const url = raffleEmailLink(this.appUrl, input.eventSlug, 'verify', input.token);
     const { subject } = await renderRaffleEmail({
       kind: 'VERIFICATION',
-      locale: input.locale,
       verificationUrl: url,
     });
     return this.record({ kind: 'VERIFICATION', to: input.email, subject, url });
@@ -64,12 +62,10 @@ export class LoggingRaffleMailer implements RaffleMailer {
     email: string;
     number: bigint;
     receiptToken: string;
-    locale: 'en' | 'ja';
   }): Promise<{ id?: string }> {
     const url = raffleEmailLink(this.appUrl, input.eventSlug, 'number', input.receiptToken);
     const { subject } = await renderRaffleEmail({
       kind: 'RECEIPT',
-      locale: input.locale,
       number: input.number,
       receiptUrl: url,
     });

@@ -22,13 +22,6 @@ test('the event URL renders without downgrading the connection', async ({ page }
   await expect(page.locator('img[alt="LIVAPON"]')).toBeVisible();
 });
 
-test('the page offers both languages', async ({ page }) => {
-  await page.goto(`${baseUrl}/${eventSlug}`);
-
-  await expect(page.getByRole('button', { name: 'English' })).toBeVisible();
-  await expect(page.getByRole('button', { name: '日本語' })).toBeVisible();
-});
-
 test('the terms are reachable from the entry page', async ({ page }) => {
   const response = await page.goto(`${baseUrl}/${eventSlug}/terms`);
 

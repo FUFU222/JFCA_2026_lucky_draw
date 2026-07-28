@@ -1,7 +1,5 @@
 import type { CSSProperties } from 'react';
 
-export type EmailLocale = 'en' | 'ja';
-
 /**
  * Email clients strip stylesheets, so every rule is inline. The layout is a
  * single centered column with generous type: most recipients open this on a

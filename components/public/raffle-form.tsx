@@ -6,7 +6,7 @@ import { TurnstileWidget } from './turnstile-widget';
 import { ConfirmationDialog } from '../ui/confirmation-dialog';
 import { PRIVACY_POLICY_URL } from '../../lib/campaign/legal';
 import { DEFAULT_COUNTRY, type CountryOption } from '../../lib/i18n/countries';
-import { messagesFor, type Locale } from '../../lib/i18n/messages';
+import { messages } from '../../lib/i18n/messages';
 
 type Draft = {
   firstName: string;
@@ -52,7 +52,6 @@ function readDraft(eventSlug: string): Draft {
 
 export interface RaffleFormProps {
   eventSlug: string;
-  locale: Locale;
   turnstileSiteKey: string;
   /**
    * Resolved on the server. Country names come from ICU data, and Node's copy
@@ -74,14 +73,13 @@ type Screen = 'form' | 'submitted';
 
 export function RaffleForm({
   eventSlug,
-  locale,
   turnstileSiteKey,
   countries,
   isTestMode = false,
 }: RaffleFormProps) {
-  const t = messagesFor(locale).form;
-  const submitted = messagesFor(locale).submitted;
-  const sendDialog = messagesFor(locale).sendDialog;
+  const t = messages.form;
+  const submitted = messages.submitted;
+  const sendDialog = messages.sendDialog;
 
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [restored, setRestored] = useState(false);
@@ -160,7 +158,6 @@ export function RaffleForm({
     const accepted = await post(`/api/campaigns/${eventSlug}/entries`, {
       email: draft.email.trim(),
       terms_consent: true,
-      locale,
       first_name: draft.firstName,
       last_name: draft.lastName,
       phone: draft.phone,
@@ -516,11 +513,7 @@ function splitOnce(value: string, needle: string): [string, string?] {
   return [value.slice(0, index), value.slice(index + needle.length)];
 }
 
-function errorFor(
-  code: string | undefined,
-  status: number,
-  t: ReturnType<typeof messagesFor>['form'],
-): string {
+function errorFor(code: string | undefined, status: number, t: typeof messages.form): string {
   switch (code) {
     case 'captcha_failed':
       return t.captchaFailed;

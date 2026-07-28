@@ -136,7 +136,6 @@ class MemoryRepository implements RaffleRepository {
     return {
       entryId: entry.id,
       email: entry.email,
-      locale: entry.locale,
       campaignSlug: this.campaign.slug,
       number: this.assignedNumber,
     };
@@ -214,7 +213,6 @@ function buildService(overrides: {
 const validRequest = {
   eventSlug: 'jfca-2026',
   email: 'person@example.com',
-  locale: 'en' as const,
   termsConsent: true as const,
   turnstileToken: 'turnstile-token',
   ipAddress: '203.0.113.1',
@@ -248,7 +246,7 @@ describe('RaffleService registration', () => {
     const cases = [
       { ...validRequest, termsConsent: false },
       { ...validRequest, email: 'not-an-address' },
-      { ...validRequest, locale: 'fr' },
+      { ...validRequest, locale: 'en' },
       { ...validRequest, turnstileToken: '' },
       { ...validRequest, dateOfBirth: '31-12-1990' },
     ];

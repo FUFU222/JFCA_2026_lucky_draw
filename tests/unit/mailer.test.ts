@@ -39,14 +39,12 @@ describe('LoggingRaffleMailer', () => {
       eventSlug: 'jfca-2026',
       email: 'person@example.com',
       token: 'verification-token',
-      locale: 'en',
     });
     await mailer.sendReceipt({
       eventSlug: 'jfca-2026',
       email: 'person@example.com',
       number: BigInt(10_000),
       receiptToken: 'receipt-token',
-      locale: 'ja',
     });
 
     expect(mailer.sent).toEqual([
@@ -59,7 +57,7 @@ describe('LoggingRaffleMailer', () => {
       {
         kind: 'RECEIPT',
         to: 'person@example.com',
-        subject: '抽選番号のお知らせ',
+        subject: 'Your Lucky Draw number',
         url: 'https://luckydraw.livapon.com/jfca-2026/number/receipt-token',
       },
     ]);

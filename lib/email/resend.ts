@@ -36,11 +36,9 @@ export class ResendRaffleMailer implements RaffleMailer {
     eventSlug: string;
     email: string;
     token: string;
-    locale: 'en' | 'ja';
   }): Promise<{ id?: string }> {
     const message = await renderRaffleEmail({
       kind: 'VERIFICATION',
-      locale: input.locale,
       verificationUrl: raffleEmailLink(this.appUrl, input.eventSlug, 'verify', input.token),
     });
     return this.send(input.email, message, 'verification');
@@ -51,11 +49,9 @@ export class ResendRaffleMailer implements RaffleMailer {
     email: string;
     number: bigint;
     receiptToken: string;
-    locale: 'en' | 'ja';
   }): Promise<{ id?: string }> {
     const message = await renderRaffleEmail({
       kind: 'RECEIPT',
-      locale: input.locale,
       number: input.number,
       receiptUrl: raffleEmailLink(this.appUrl, input.eventSlug, 'number', input.receiptToken),
     });

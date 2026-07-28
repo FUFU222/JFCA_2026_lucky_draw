@@ -144,7 +144,6 @@ be issued after the draw has begun.
       valid, checked from a Toronto network or an external Toronto probe.
 - [ ] The exact production QR code scanned on a real iPhone and a real Android
       handset, on mobile data, not office wifi.
-- [ ] English and Japanese both walked end to end on a phone.
 - [ ] A confirmation link opened, confirmed, and the number page screenshotted.
 - [ ] The same link opened a second time — it must say the link cannot be used.
 - [ ] A resend requested, and the cooldown message seen.

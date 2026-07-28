@@ -4,12 +4,11 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { ConfirmationDialog } from '../ui/confirmation-dialog';
-import { messagesFor, type Locale } from '../../lib/i18n/messages';
+import { messages } from '../../lib/i18n/messages';
 
 export interface VerificationConfirmationProps {
   eventSlug: string;
   token: string;
-  locale: Locale;
 }
 
 /**
@@ -17,12 +16,8 @@ export interface VerificationConfirmationProps {
  * deliberate action, so a mail client that pre-fetches the URL cannot consume
  * the link or claim a number on the visitor's behalf.
  */
-export function VerificationConfirmation({
-  eventSlug,
-  token,
-  locale,
-}: VerificationConfirmationProps) {
-  const t = messagesFor(locale).verify;
+export function VerificationConfirmation({ eventSlug, token }: VerificationConfirmationProps) {
+  const t = messages.verify;
   const router = useRouter();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [busy, setBusy] = useState(false);

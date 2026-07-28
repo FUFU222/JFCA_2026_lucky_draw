@@ -2,7 +2,6 @@ import { render } from 'react-email';
 
 import { NumberReceiptEmail } from '../../emails/number-receipt-email';
 import { VerificationEmail } from '../../emails/verification-email';
-import type { EmailLocale } from '../../emails/styles';
 import { formatRaffleNumber } from '../raffle/number';
 
 export const RAFFLE_EMAIL_SENDER = 'LIVAPON <info@chairman.jp>';
@@ -11,8 +10,8 @@ export const RAFFLE_SUPPORT_EMAIL = 'info@chairman.jp';
 export type RaffleEmailKind = 'VERIFICATION' | 'RECEIPT';
 
 export type RaffleEmailInput =
-  | { kind: 'VERIFICATION'; locale: EmailLocale; verificationUrl: string }
-  | { kind: 'RECEIPT'; locale: EmailLocale; number: bigint; receiptUrl: string };
+  | { kind: 'VERIFICATION'; verificationUrl: string }
+  | { kind: 'RECEIPT'; number: bigint; receiptUrl: string };
 
 export interface RenderedEmail {
   subject: string;
@@ -21,21 +20,19 @@ export interface RenderedEmail {
 }
 
 const subjects = {
-  VERIFICATION: { en: 'Verify your email address', ja: 'メールアドレスの確認' },
-  RECEIPT: { en: 'Your Lucky Draw number', ja: '抽選番号のお知らせ' },
+  VERIFICATION: 'Verify your email address',
+  RECEIPT: 'Your Lucky Draw number',
 } as const;
 
 export async function renderRaffleEmail(input: RaffleEmailInput): Promise<RenderedEmail> {
   const element =
     input.kind === 'VERIFICATION' ? (
       VerificationEmail({
-        locale: input.locale,
         verificationUrl: input.verificationUrl,
         supportEmail: RAFFLE_SUPPORT_EMAIL,
       })
     ) : (
       NumberReceiptEmail({
-        locale: input.locale,
         formattedNumber: formatRaffleNumber(input.number),
         receiptUrl: input.receiptUrl,
         supportEmail: RAFFLE_SUPPORT_EMAIL,
@@ -49,5 +46,5 @@ export async function renderRaffleEmail(input: RaffleEmailInput): Promise<Render
     render(element, { plainText: true }),
   ]);
 
-  return { subject: subjects[input.kind][input.locale], html, text };
+  return { subject: subjects[input.kind], html, text };
 }

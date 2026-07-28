@@ -3,7 +3,6 @@ import 'server-only';
 import { createServiceRoleClient } from './server';
 import type { Campaign } from './types';
 import { hashToken } from '../raffle/tokens';
-import type { Locale } from '../i18n/messages';
 
 /**
  * Read-only lookups for the public pages. Nothing here mutates: opening an
@@ -57,7 +56,6 @@ export async function verificationLinkState(
 
 export interface ReceiptView {
   number: bigint;
-  locale: Locale;
 }
 
 /** Looks a receipt up by the hash of its token; the token itself is never stored. */
@@ -67,7 +65,7 @@ export async function findReceipt(
 ): Promise<ReceiptView | null> {
   const { data, error } = await createServiceRoleClient()
     .from('raffle_entries')
-    .select('number, locale, campaigns!inner(slug)')
+    .select('number, campaigns!inner(slug)')
     .eq('receipt_token_hash', hashToken(rawReceiptToken))
     .maybeSingle();
   if (error) throw error;
@@ -75,11 +73,10 @@ export async function findReceipt(
 
   const row = data as {
     number: number | string | null;
-    locale: Locale;
     campaigns: { slug: string } | { slug: string }[];
   };
   const campaign = Array.isArray(row.campaigns) ? row.campaigns[0] : row.campaigns;
   if (campaign?.slug !== eventSlug || row.number === null) return null;
 
-  return { number: BigInt(row.number), locale: row.locale };
+  return { number: BigInt(row.number) };
 }

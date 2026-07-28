@@ -33,7 +33,6 @@ export interface OutboxJob {
 /** Everything a job needs to become an addressed message. */
 export interface OutboxEntryContext {
   email: string;
-  locale: 'en' | 'ja';
   campaignSlug: string;
   number: bigint | null;
   receiptTokenHash: string | null;
@@ -188,7 +187,6 @@ export class EmailOutboxProcessor {
     return this.dependencies.mailer.sendVerification({
       eventSlug: context.campaignSlug,
       email: context.email,
-      locale: context.locale,
       token: deriveVerificationToken(tokenId, this.dependencies.verificationTokenSecret),
     });
   }
@@ -213,7 +211,6 @@ export class EmailOutboxProcessor {
     return this.dependencies.mailer.sendReceipt({
       eventSlug: context.campaignSlug,
       email: context.email,
-      locale: context.locale,
       number: context.number,
       receiptToken,
     });

@@ -149,34 +149,6 @@ test('a visitor enters, confirms, and receives one number', async ({ page }) => 
   await expect(page.getByText(/announced at the venue/i)).toBeVisible();
 });
 
-test('a Japanese visitor sees the journey in Japanese', async ({ page }) => {
-  const campaign = await createOpenCampaign();
-  const email = `journey-ja-${unique()}@example.com`;
-
-  await page.goto(`/${campaign.slug}`);
-  await page.getByRole('button', { name: '日本語' }).click();
-  await expect(page.getByRole('heading', { name: '抽選番号を受け取る' })).toBeVisible();
-
-  await page.getByLabel(/メールアドレス/).fill(email);
-  await page.getByRole('checkbox').check();
-
-  const submit = page.getByRole('button', { name: '確認メールを送信' });
-  await expect(submit).toBeEnabled({ timeout: 15_000 });
-  await submit.click();
-  await page.getByRole('dialog').getByRole('button', { name: '確認メールを送信' }).click();
-  await expect(page.getByRole('heading', { name: 'メールをご確認ください' })).toBeVisible();
-
-  const token = await verificationLinkFor(campaign.id);
-  await page.goto(`/${campaign.slug}/verify/${token}`);
-  await page.getByRole('button', { name: '確認して番号を受け取る' }).click();
-  await page.getByRole('dialog').getByRole('button', { name: '番号を受け取る' }).click();
-
-  await expect(page.getByRole('heading', { name: 'ご応募を受け付けました' })).toBeVisible();
-  await expect(page.getByText('No. 10000')).toBeVisible();
-  // The label stays in English because that is the wording the design specifies.
-  await expect(page.getByText('Your Lucky Draw Number')).toBeVisible();
-});
-
 test('a reload in the same tab restores what was typed', async ({ page }) => {
   const campaign = await createOpenCampaign();
 

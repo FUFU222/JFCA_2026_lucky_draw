@@ -91,6 +91,17 @@ test('an operator signs in, and the login is recorded', async ({ page }) => {
 });
 
 test('pausing and resuming needs a confirmation and is recorded', async ({ page }) => {
+  // The seeded campaign starts DRAFT with no dates, which only offers "Start
+  // entries now" — pause/resume only appear once it is actually scheduled.
+  await supabase
+    .from('campaigns')
+    .update({
+      status: 'SCHEDULED',
+      opens_at: new Date(Date.now() - 60_000).toISOString(),
+      draw_starts_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
+    })
+    .eq('slug', 'jfca-2026');
+
   await signIn(page, operatorAddress('ops.pause'));
 
   // Cancel changes nothing.
