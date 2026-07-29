@@ -125,6 +125,13 @@ step in [on-site-runbook.md](on-site-runbook.md). Cancel by **2026-08-31**.
 
 ## 5. Legal and content
 
+- [ ] **Decide whether marketing consent stays bundled into the required
+      agreement.** Entry currently requires one checkbox, and the terms behind
+      it also cover LIVAPON news — so entering means accepting marketing. The
+      event is in Toronto, so CASL applies. Splitting it into a second,
+      optional checkbox is about an hour of work and has to happen before
+      launch if it is going to happen at all. A team decision, not one
+      person's.
 - [ ] Final Lucky Draw terms wording approved.
 - [ ] Wording placed in `lib/campaign/legal.ts`, and `LUCKY_DRAW_TERMS_VERSION`
       bumped from `jfca-2026-terms-v1-placeholder` in the **same** change as the

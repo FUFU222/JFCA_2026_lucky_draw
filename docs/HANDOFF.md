@@ -130,11 +130,28 @@ specs: 5 public journey, 6 admin, 8 read-only production smoke.
 
 ## Open items
 
-1. **The Lucky Draw terms still need legal sign-off.** `lib/campaign/legal.ts`
-   carries placeholder wording under `jfca-2026-terms-v1-placeholder`, and the
-   production campaign row still has that version. When the final text lands,
-   bump the constant and the campaign's `terms_version` in the same change, so a
-   recorded consent always points at the text that was shown.
+1. **Marketing consent is bundled into the required agreement — a team
+   decision, deliberately not made by one person.** Raised with the team on
+   2026-07-29; **blocks launch.**
+
+   The entry form has one required checkbox, and the terms behind it say the
+   address is also used for LIVAPON news. Entry is therefore conditional on
+   accepting marketing. The event is in Toronto, so Canada's anti-spam law
+   (CASL) is the regime that applies, and bundling marketing consent into a
+   condition of entry is the pattern that attracts attention there. Nobody on
+   this project is a lawyer; the point is that the choice has a real trade-off
+   and should be owned by more than one person.
+
+   - **Keep bundled** — the mailing list is effectively every entrant. No work.
+   - **Split it out** — an optional second checkbox, entry unaffected. Needs a
+     `marketing_consent` column, the form field, the CSV column, and the
+     marketing sentence removed from the required terms. Roughly an hour.
+
+   Whatever is decided, `lib/campaign/legal.ts` still carries placeholder
+   wording under `jfca-2026-terms-v1-placeholder`, and the production campaign
+   row still has that version. Bump the constant and the campaign's
+   `terms_version` **in the same change**, so a recorded consent always points
+   at the text that was actually shown.
 2. **A resend after the link expired sends nothing** and the acknowledgement
    page does not say "submit the form again". The service behaviour is
    intentional; the wording gap is real. The *verify* page was fixed; only the
