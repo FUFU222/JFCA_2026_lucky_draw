@@ -57,13 +57,32 @@ thing that must not run against the real database.
 The plan and the raised rate limit are for this event only — see the teardown
 step in [on-site-runbook.md](on-site-runbook.md). Cancel by **2026-08-31**.
 
-- [ ] **Choose a plan that covers roughly 60,000 messages**: about 30,000
+- [x] **Choose a plan that covers roughly 60,000 messages**: about 30,000
       entrants, each receiving a verification email and a number receipt. The
-      free allowance is nowhere near this.
-- [ ] **Ask Resend to raise the API rate limit.** The default is around two
-      requests per second. Both messages are sent inline as visitors arrive, so
-      30,000 entrants over seven hours averages above that before any peak. This
-      needs a support request, so raise it on the same day as the plan change.
+      free allowance is nowhere near this. Pro was taken on 2026-07-29.
+
+      Note the tier: Pro includes 50,000 messages at $20 and 100,000 at $35,
+      with overage at $0.90 per 1,000. On the 30,000-entrant estimate the 50K
+      tier runs about 10,000 messages over, which is only ~$9 — the reason to
+      take the 100K tier is not the money but not wanting a billing surprise
+      to be something anybody thinks about on event day.
+- [ ] **Ask Resend to raise the API rate limit.** The default is **10 requests
+      per second per team** (Settings → Usage shows the team's current value —
+      read it there rather than assuming). It does not vary by plan; an
+      increase is a support request, granted to trusted senders.
+
+      **Ask for 50/s.** Both messages are sent inline as visitors arrive, so
+      30,000 entrants across a seven-hour day averages only ~2.4/s — but that
+      is the average. Festival arrivals cluster, and a three-to-four-times
+      peak puts the booth at 7–10/s, i.e. at the default ceiling with no
+      margin at the exact moment a queue is forming.
+
+      What makes this worth over-asking for: a 429 is not handled specially
+      anywhere in the mail layer. It is an ordinary failure, so the message
+      falls to `email_outbox` and waits for the retry worker — which asks for
+      five minutes and really runs about every 88. The visitor standing at the
+      booth gets nothing, and their own **Send it again** hits the same
+      ceiling. The rate limit is the critical path here, not a backstop.
 - [ ] Verify the sending domain for `info@chairman.jp`: SPF and DKIM records
       published, and DMARC checked if the domain has a policy.
 - [ ] Send one test message to a Gmail address and one to an Outlook address, and
