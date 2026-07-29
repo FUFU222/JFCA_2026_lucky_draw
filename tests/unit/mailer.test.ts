@@ -17,6 +17,11 @@ describe('parseMailDeliveryMode', () => {
   it('refuses an unrecognized mode instead of guessing', () => {
     expect(() => parseMailDeliveryMode('silent')).toThrow('MAIL_DELIVERY_MODE');
   });
+
+  it('tolerates the trailing newline a dashboard paste commonly leaves', () => {
+    expect(parseMailDeliveryMode('send\n')).toBe('send');
+    expect(parseMailDeliveryMode(' log ')).toBe('log');
+  });
 });
 
 describe('createRaffleMailer', () => {

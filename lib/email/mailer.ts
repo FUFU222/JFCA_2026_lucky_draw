@@ -7,9 +7,13 @@ export type MailDeliveryMode = 'send' | 'log';
 export const DEFAULT_MAIL_DELIVERY_MODE: MailDeliveryMode = 'send';
 
 export function parseMailDeliveryMode(value: string | undefined): MailDeliveryMode {
-  if (!value) return DEFAULT_MAIL_DELIVERY_MODE;
-  if (value === 'send' || value === 'log') return value;
-  throw new Error(`MAIL_DELIVERY_MODE must be "send" or "log", received "${value}"`);
+  // Vercel's dashboard commonly leaves a trailing newline on a pasted env var
+  // value; a config typo severe enough to fail closed should not include
+  // that one, since it costs every mail-sending route in production.
+  const trimmed = value?.trim();
+  if (!trimmed) return DEFAULT_MAIL_DELIVERY_MODE;
+  if (trimmed === 'send' || trimmed === 'log') return trimmed;
+  throw new Error(`MAIL_DELIVERY_MODE must be "send" or "log", received "${trimmed}"`);
 }
 
 export interface LoggedRaffleEmail {
