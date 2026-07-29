@@ -70,14 +70,14 @@ export const messages = {
     resendDone: 'If this address can enter, another link is on its way.',
   },
 
+  // This page has no confirmation dialog, so the one line under the heading is
+  // the whole warning — it has to say what pressing the button does and that it
+  // happens once. See the note in `VerificationConfirmation` for why a dialog
+  // here was removed while the one on the entry form stayed.
   verify: {
     heading: 'Confirm your email',
-    body: 'Confirming issues your Lucky Draw number. It cannot be changed afterwards.',
-    action: 'Confirm and get my number',
-    dialogTitle: 'Get your Lucky Draw number?',
-    dialogBody: 'Your number is issued now and stays yours for this event.',
-    dialogConfirm: 'Get my number',
-    dialogCancel: 'Go back',
+    body: 'This issues your Lucky Draw number. You get one number, and it stays yours for this event.',
+    action: 'Get my number',
     working: 'Issuing your number…',
     invalidHeading: 'This link cannot be used',
     invalidBody:

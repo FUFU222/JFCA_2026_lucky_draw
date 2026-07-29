@@ -168,7 +168,8 @@ rehearsal works before opening and after closing.
 - [ ] On both handsets, the email field, the consent line and the send button
       are all reachable **without scrolling**. The optional profile section is a
       collapsed row above them; opening it must reveal all seven fields.
-- [ ] A confirmation link opened, confirmed, and the number page screenshotted.
+- [ ] A confirmation link opened, **Get my number** pressed once — there is no
+      dialog on that page — and the number page screenshotted.
 - [ ] The same link opened a second time — it must say the link cannot be used.
 - [ ] A resend requested, and the cooldown message seen.
 - [ ] Operator sign-in with a `@chairman.jp` address, and an address outside the

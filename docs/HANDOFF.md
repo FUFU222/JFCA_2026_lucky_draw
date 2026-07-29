@@ -80,6 +80,16 @@ confirmed email, and a prior `ADMIN_LOGIN` audit row. The third closes the
 anon-key self-signup path, and it means the first sign-in for any account has to
 go through the real magic-link flow.
 
+**Confirmation dialogs are not applied uniformly, on purpose.** The entry form
+has one because it shows the typed address back, and a typo there is a real,
+common mistake with no other guard. The admin controls have them because
+pausing or closing changes what every visitor sees, and closing cannot be
+undone. The verify page deliberately has none: it exists to do one thing, is
+reached by opening a link on purpose, states the consequence above the button,
+and the "irreversible" outcome is precisely the one the visitor came for — a
+dialog there only restated the page and put a tap between the visitor and their
+number. Do not add one back for consistency.
+
 ## Test mode, in full
 
 Added because rehearsing the journey previously meant creating real entries.

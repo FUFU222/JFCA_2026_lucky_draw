@@ -3,7 +3,6 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
-import { ConfirmationDialog } from '../ui/confirmation-dialog';
 import { Spinner } from '../ui/spinner';
 import { messages } from '../../lib/i18n/messages';
 
@@ -13,14 +12,21 @@ export interface VerificationConfirmationProps {
 }
 
 /**
- * Opening the emailed link only gets you here. The number is issued by this
- * deliberate action, so a mail client that pre-fetches the URL cannot consume
- * the link or claim a number on the visitor's behalf.
+ * Opening the emailed link only gets you here. The number is issued by the
+ * button below, never by the GET, so a mail client that pre-fetches the URL
+ * cannot consume the link or claim a number on the visitor's behalf.
+ *
+ * There is deliberately no confirmation dialog in front of that button. One
+ * used to sit here, but it only restated what this page already says, on a
+ * page that exists to do one thing, reached by opening a link on purpose. The
+ * dialog on the entry form earns its place because it shows the typed address
+ * back — a typo there is a real and common mistake with no other guard. Here
+ * there is nothing to check and nothing to lose: the "irreversible" outcome
+ * being confirmed is precisely the one the visitor came for.
  */
 export function VerificationConfirmation({ eventSlug, token }: VerificationConfirmationProps) {
   const t = messages.verify;
   const router = useRouter();
-  const [dialogOpen, setDialogOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,7 +63,6 @@ export function VerificationConfirmation({ eventSlug, token }: VerificationConfi
 
   function stopWorking() {
     setBusy(false);
-    setDialogOpen(false);
   }
 
   return (
@@ -74,28 +79,14 @@ export function VerificationConfirmation({ eventSlug, token }: VerificationConfi
       <button
         type="button"
         disabled={busy}
-        onClick={() => setDialogOpen(true)}
-        className="min-h-14 w-full rounded-lg bg-[var(--brand-accent)] px-6 text-base font-semibold text-white transition-colors hover:bg-[var(--brand-accent-hover)] active:bg-[var(--brand-accent-hover)] disabled:bg-neutral-400"
+        onClick={confirm}
+        className="min-h-14 w-full rounded-lg bg-[var(--brand-accent)] px-6 py-3 text-base font-semibold leading-snug text-white transition-colors hover:bg-[var(--brand-accent-hover)] active:bg-[var(--brand-accent-hover)] disabled:bg-neutral-400"
       >
         <span className="inline-flex items-center justify-center gap-2">
           {busy && <Spinner />}
           {busy ? t.working : t.action}
         </span>
       </button>
-
-      <ConfirmationDialog
-        open={dialogOpen}
-        title={t.dialogTitle}
-        confirmLabel={t.dialogConfirm}
-        cancelLabel={t.dialogCancel}
-        busy={busy}
-        busyLabel={t.working}
-        onCancel={() => setDialogOpen(false)}
-        onConfirm={confirm}
-        tone="brand"
-      >
-        <p>{t.dialogBody}</p>
-      </ConfirmationDialog>
     </section>
   );
 }

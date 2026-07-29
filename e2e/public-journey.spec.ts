@@ -128,8 +128,9 @@ test('a visitor enters, confirms, and receives one number', async ({ page }) => 
     .single();
   expect(beforeConfirm).toMatchObject({ state: 'PENDING', number: null });
 
-  await page.getByRole('button', { name: 'Confirm and get my number' }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Get my number' }).click();
+  // One press: this page states the consequence and exists to do one thing, so
+  // there is no dialog in front of it.
+  await page.getByRole('button', { name: 'Get my number' }).click();
 
   await expect(page.getByText('No. 10000')).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`/${campaign.slug}/number/`));
