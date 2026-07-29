@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { ConfirmationDialog } from '../ui/confirmation-dialog';
+import { Spinner } from '../ui/spinner';
 import { messages } from '../../lib/i18n/messages';
 
 export interface VerificationConfirmationProps {
@@ -65,7 +66,10 @@ export function VerificationConfirmation({ eventSlug, token }: VerificationConfi
         onClick={() => setDialogOpen(true)}
         className="min-h-14 w-full rounded-lg bg-[var(--brand-accent)] px-6 text-base font-semibold text-white transition-colors hover:bg-[var(--brand-accent-hover)] active:bg-[var(--brand-accent-hover)] disabled:bg-neutral-400"
       >
-        {busy ? t.working : t.action}
+        <span className="inline-flex items-center justify-center gap-2">
+          {busy && <Spinner />}
+          {busy ? t.working : t.action}
+        </span>
       </button>
 
       <ConfirmationDialog
@@ -77,6 +81,7 @@ export function VerificationConfirmation({ eventSlug, token }: VerificationConfi
         busyLabel={t.working}
         onCancel={() => setDialogOpen(false)}
         onConfirm={confirm}
+        tone="brand"
       >
         <p>{t.dialogBody}</p>
       </ConfirmationDialog>

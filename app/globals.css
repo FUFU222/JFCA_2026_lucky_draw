@@ -13,7 +13,7 @@ body {
   margin: 0;
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-body), Arial, Helvetica, sans-serif;
 }
 
 /*
@@ -120,4 +120,37 @@ body {
   height: 7px;
   border-radius: 2px;
   animation: confetti-burst 900ms ease-out both;
+}
+
+/*
+ * Feedback for the moment right after a tap, everywhere a request is in
+ * flight: a dialog opening, a screen replacing itself once a send succeeds.
+ * Kept to opacity and a small translate so it never delays reading the result.
+ */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in {
+  animation: fade-in 150ms ease-out both;
+}
+
+.fade-in-up {
+  animation: fade-in-up 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }

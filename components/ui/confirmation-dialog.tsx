@@ -2,6 +2,8 @@
 
 import { useEffect, useId, useRef, type ReactNode } from 'react';
 
+import { Spinner } from './spinner';
+
 export interface ConfirmationDialogProps {
   open: boolean;
   title: string;
@@ -12,6 +14,12 @@ export interface ConfirmationDialogProps {
   busy?: boolean;
   busyLabel?: string;
   children?: ReactNode;
+  /**
+   * `brand` is for the public entry flow, where the confirm button is the
+   * one moment this dialog shares the site's accent color. Admin actions
+   * (pause, close, export) stay `neutral`, their existing look.
+   */
+  tone?: 'neutral' | 'brand';
 }
 
 /**
@@ -30,6 +38,7 @@ export function ConfirmationDialog({
   busy = false,
   busyLabel,
   children,
+  tone = 'neutral',
 }: ConfirmationDialogProps) {
   const titleId = useId();
   const cancelRef = useRef<HTMLButtonElement>(null);
@@ -78,7 +87,7 @@ export function ConfirmationDialog({
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
       <div
         data-testid="confirmation-dialog-backdrop"
-        className="absolute inset-0 bg-neutral-950/50"
+        className="fade-in absolute inset-0 bg-neutral-950/50"
         onClick={() => !busy && onCancel()}
       />
       <div
@@ -87,7 +96,7 @@ export function ConfirmationDialog({
         aria-modal="true"
         aria-labelledby={titleId}
         onKeyDown={handleKeyDown}
-        className="relative w-full max-w-md rounded-t-2xl bg-white p-6 shadow-xl sm:rounded-2xl"
+        className="fade-in-up relative w-full max-w-md rounded-t-2xl bg-white p-6 shadow-xl sm:rounded-2xl"
       >
         <h2 id={titleId} className="text-lg font-bold text-neutral-900">
           {title}
@@ -110,9 +119,16 @@ export function ConfirmationDialog({
             type="button"
             onClick={onConfirm}
             disabled={busy}
-            className="min-h-12 flex-1 rounded-lg bg-neutral-900 px-5 text-base font-semibold text-white disabled:opacity-60"
+            className={`min-h-12 flex-1 rounded-lg px-5 text-base font-semibold text-white disabled:opacity-60 ${
+              tone === 'brand'
+                ? 'bg-[var(--brand-accent)] hover:bg-[var(--brand-accent-hover)]'
+                : 'bg-neutral-900'
+            }`}
           >
-            {busy && busyLabel ? busyLabel : confirmLabel}
+            <span className="inline-flex items-center justify-center gap-2">
+              {busy && <Spinner />}
+              {busy && busyLabel ? busyLabel : confirmLabel}
+            </span>
           </button>
         </div>
       </div>

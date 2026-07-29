@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 
 import { TurnstileWidget } from './turnstile-widget';
 import { ConfirmationDialog } from '../ui/confirmation-dialog';
+import { Spinner } from '../ui/spinner';
 import { PRIVACY_POLICY_URL } from '../../lib/campaign/legal';
 import { DEFAULT_COUNTRY, type CountryOption } from '../../lib/i18n/countries';
 import { messages } from '../../lib/i18n/messages';
@@ -198,7 +199,7 @@ export function RaffleForm({
     return (
       <>
         {isTestMode && <TestModeBanner />}
-        <section className="space-y-4">
+        <section className="fade-in-up space-y-4">
         <h2 className="text-2xl font-bold text-neutral-900">{submitted.heading}</h2>
         <p className="text-[15px] leading-relaxed text-neutral-700">{submitted.body}</p>
         <p className="rounded-lg bg-neutral-100 px-4 py-3 text-sm text-neutral-600">
@@ -235,7 +236,10 @@ export function RaffleForm({
           onClick={() => setDialog('resend')}
           className="min-h-12 w-full rounded-lg border border-neutral-300 px-5 text-base font-semibold text-neutral-800 transition-colors hover:border-neutral-400 disabled:opacity-40"
         >
-          {status === 'sending' ? t.submitting : submitted.resend}
+          <span className="inline-flex items-center justify-center gap-2">
+            {status === 'sending' && <Spinner />}
+            {status === 'sending' ? t.submitting : submitted.resend}
+          </span>
         </button>
 
         <ConfirmationDialog
@@ -245,6 +249,7 @@ export function RaffleForm({
           cancelLabel={submitted.resendDialogCancel}
           onCancel={() => setDialog('none')}
           onConfirm={resendEntry}
+          tone="brand"
         >
           <p>{submitted.resendDialogBody}</p>
           <p className="font-semibold break-all text-neutral-900">{draft.email.trim()}</p>
@@ -268,7 +273,10 @@ export function RaffleForm({
     >
       <section className="space-y-4">
         <div>
-          <h2 className="text-xl font-bold text-neutral-900">{t.profileHeading}</h2>
+          <h2 className="flex items-center gap-2 text-xl font-bold text-neutral-900">
+            <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-[var(--brand-accent)]" />
+            {t.profileHeading}
+          </h2>
           <p className="mt-1 text-sm text-neutral-600">{t.profileNote}</p>
         </div>
 
@@ -428,7 +436,10 @@ export function RaffleForm({
           disabled={!canSend}
           className="min-h-14 w-full rounded-lg bg-[var(--brand-accent)] px-6 text-base font-semibold text-white transition-colors hover:bg-[var(--brand-accent-hover)] active:bg-[var(--brand-accent-hover)] disabled:bg-neutral-400"
         >
-          {status === 'sending' ? t.submitting : t.submit}
+          <span className="inline-flex items-center justify-center gap-2">
+            {status === 'sending' && <Spinner />}
+            {status === 'sending' ? t.submitting : t.submit}
+          </span>
         </button>
       </section>
 
@@ -439,6 +450,7 @@ export function RaffleForm({
         cancelLabel={sendDialog.cancel}
         onCancel={() => setDialog('none')}
         onConfirm={submitEntry}
+        tone="brand"
       >
         <p>{sendDialog.body}</p>
         <p className="font-semibold break-all text-neutral-900">{draft.email.trim()}</p>
