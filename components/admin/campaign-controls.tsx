@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 
 import { ConfirmationDialog } from '../ui/confirmation-dialog';
 
@@ -83,14 +83,21 @@ export function CampaignControls({
 }) {
   const router = useRouter();
   const [pendingAction, setPendingAction] = useState<ActionSpec | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [sending, setSending] = useState(false);
+  // `router.refresh()` re-fetches the dashboard's server components and does
+  // not resolve, so without a transition to watch there is nothing to wait on:
+  // the controls would go live again the instant the POST returned, over
+  // figures and a state line that still describe the campaign as it was. The
+  // transition stays pending until the refreshed dashboard has rendered.
+  const [refreshing, startRefresh] = useTransition();
+  const busy = sending || refreshing;
   const [error, setError] = useState<string | null>(null);
 
   const actions = actionsFor(status);
   const startBlocked = status === 'DRAFT' && drawStartsAt === null;
 
   async function apply(action: Action) {
-    setBusy(true);
+    setSending(true);
     setError(null);
     try {
       const response = await fetch('/admin/campaign', {
@@ -99,11 +106,13 @@ export function CampaignControls({
         body: JSON.stringify({ action }),
       });
       if (!response.ok) throw new Error('failed');
-      router.refresh();
+      startRefresh(() => router.refresh());
     } catch {
       setError('変更を適用できませんでした。');
     } finally {
-      setBusy(false);
+      // Only the request is finished here; `refreshing` keeps the controls
+      // disabled until the dashboard actually shows the new state.
+      setSending(false);
       setPendingAction(null);
     }
   }
@@ -119,12 +128,15 @@ export function CampaignControls({
           <button
             key={spec.action}
             type="button"
-            disabled={spec.action === 'START' && startBlocked}
+            // Also closed while a change is being applied: until the refreshed
+            // dashboard arrives these buttons describe the campaign as it was,
+            // and a second press would act on figures that are already stale.
+            disabled={busy || (spec.action === 'START' && startBlocked)}
             onClick={() => setPendingAction(spec)}
             className={
               spec.variant === 'primary'
                 ? 'min-h-12 rounded-lg bg-[var(--brand-accent)] px-5 text-base font-semibold text-white disabled:bg-neutral-300 disabled:text-neutral-500'
-                : 'min-h-12 rounded-lg border border-neutral-300 px-5 text-base font-semibold text-neutral-900'
+                : 'min-h-12 rounded-lg border border-neutral-300 px-5 text-base font-semibold text-neutral-900 disabled:border-neutral-200 disabled:text-neutral-400'
             }
           >
             {spec.label}

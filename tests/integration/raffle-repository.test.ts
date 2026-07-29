@@ -46,6 +46,23 @@ function buildOutboxProcessor(mailer: FakeMailer) {
   });
 }
 
+/**
+ * The worker deliberately drains the whole queue rather than one campaign's,
+ * so a job left behind by anything else — most often by a developer walking
+ * the app locally before running the suite — is claimed by these tests and
+ * makes them fail with counts nobody can explain. Clearing what is already
+ * waiting states the precondition instead of assuming a pristine database.
+ */
+async function clearOutboxOutsideThisTest() {
+  const { data: mine } = await supabase
+    .from('raffle_entries')
+    .select('id')
+    .in('campaign_id', createdCampaignIds);
+  const keep = (mine ?? []).map((entry) => entry.id);
+  const query = supabase.from('email_outbox').delete();
+  await (keep.length > 0 ? query.not('entry_id', 'in', `(${keep.join(',')})`) : query.gte('attempt_count', 0));
+}
+
 let supabase: SupabaseClient;
 const createdCampaignIds: string[] = [];
 
@@ -555,6 +572,7 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
     expect(token?.send_count).toBe(1);
 
     mailer.verificationFailure = null;
+    await clearOutboxOutsideThisTest();
     const summary = await buildOutboxProcessor(mailer).process();
 
     expect(summary).toMatchObject({ claimed: 1, sent: 1, failed: 0 });
@@ -598,6 +616,7 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
       .eq('entry_id', entry ?? '');
 
     mailer.receiptFailure = null;
+    await clearOutboxOutsideThisTest();
     const summary = await buildOutboxProcessor(mailer).process();
 
     expect(summary).toMatchObject({ claimed: 1, sent: 1, failed: 0 });

@@ -37,16 +37,27 @@ export function VerificationConfirmation({ eventSlug, token }: VerificationConfi
 
       if (!response.ok || !payload.ok || !payload.receipt_token) {
         setError(response.status === 400 ? t.invalidBody : t.failed);
+        stopWorking();
         return;
       }
 
+      // Deliberately stays busy, and deliberately has no `finally`.
+      // `router.replace` only *starts* the navigation; the number page is
+      // dynamic and has its own database reads, so it is around a second
+      // before it paints. Releasing the busy state here put this screen back
+      // — with a live, tappable button — for that whole second, which reads as
+      // "nothing happened" and invites a second tap. The dialog stays up,
+      // still saying it is issuing the number, until the new page replaces it.
       router.replace(`/${eventSlug}/number/${encodeURIComponent(payload.receipt_token)}`);
     } catch {
       setError(t.failed);
-    } finally {
-      setBusy(false);
-      setDialogOpen(false);
+      stopWorking();
     }
+  }
+
+  function stopWorking() {
+    setBusy(false);
+    setDialogOpen(false);
   }
 
   return (
