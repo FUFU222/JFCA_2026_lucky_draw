@@ -1,5 +1,8 @@
+import Image from 'next/image';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+
+import logo from '../../assets/LIVAPON_logo_horizontal_cropped.png';
 
 export function AdminShell({
   operatorEmail,
@@ -12,12 +15,16 @@ export function AdminShell({
 }) {
   return (
     <main lang="ja" className="mx-auto min-h-dvh w-full max-w-4xl px-5 pb-16 pt-6">
-      <header className="mb-8 flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200 pb-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
-            Lucky Draw 管理画面
-          </p>
-          <h1 className="text-xl font-bold text-neutral-900">{title}</h1>
+      <div aria-hidden="true" className="fixed inset-x-0 top-0 h-1 bg-[var(--brand-accent)]" />
+      <header className="mb-8 flex flex-wrap items-center justify-between gap-4 border-b border-neutral-200 pb-4">
+        <div className="flex items-center gap-4">
+          <Image src={logo} alt="LIVAPON" className="h-5 w-auto shrink-0" sizes="120px" />
+          <div className="border-l border-neutral-200 pl-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
+              Lucky Draw 管理画面
+            </p>
+            <h1 className="text-xl font-bold text-neutral-900">{title}</h1>
+          </div>
         </div>
         <div className="flex items-center gap-4 text-sm">
           <nav className="flex gap-3">

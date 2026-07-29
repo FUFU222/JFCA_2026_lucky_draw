@@ -1,6 +1,8 @@
+import Image from 'next/image';
 import { redirect } from 'next/navigation';
 
 import { LoginForm } from '../../../components/admin/login-form';
+import logo from '../../../assets/LIVAPON_logo_horizontal_cropped.png';
 import { OPERATOR_DOMAIN } from '../../../lib/security/admin';
 import { getOperatorSession } from '../../../lib/security/operator-session';
 
@@ -21,6 +23,9 @@ export default async function AdminLoginPage({
 
   return (
     <main lang="ja" className="mx-auto min-h-dvh w-full max-w-md px-5 py-16">
+      <div aria-hidden="true" className="fixed inset-x-0 top-0 h-1 bg-[var(--brand-accent)]" />
+      <Image src={logo} alt="LIVAPON" priority className="mb-8 h-6 w-auto" sizes="140px" />
+
       <h1 className="text-2xl font-bold text-neutral-900">Lucky Draw 管理画面</h1>
       <p className="mt-2 text-[15px] leading-relaxed text-neutral-600">
         {OPERATOR_DOMAIN} のメールアドレスでサインインしてください。サインインリンクをメールでお送りします。
