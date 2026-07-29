@@ -30,8 +30,9 @@ function renderForm() {
 }
 
 function confirmInDialog(name: string) {
-  // The form's submit button and the dialog's action share a label, which is
-  // exactly right for the visitor; the test has to say which one it means.
+  // Scoped to the dialog on purpose: the form's own submit button is still on
+  // the page behind it, and a query across the whole screen would be ambiguous
+  // the moment the two labels overlap again.
   fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name }));
 }
 
@@ -191,7 +192,7 @@ describe('sending', () => {
     renderForm();
     await fillAndOpenDialog();
 
-    confirmInDialog('Send confirmation email');
+    confirmInDialog('Send email');
 
     await screen.findByRole('heading', { name: 'Check your email' });
     expect(fetch).toHaveBeenCalledTimes(1);
@@ -213,7 +214,7 @@ describe('sending', () => {
     renderForm();
     await fillAndOpenDialog();
 
-    confirmInDialog('Send confirmation email');
+    confirmInDialog('Send email');
 
     await screen.findByText(/Too many attempts/);
     expect(screen.getByLabelText(/Email address/)).toHaveValue('person@example.com');
@@ -239,7 +240,7 @@ describe('draft recovery', () => {
     const first = renderForm();
     fireEvent.change(screen.getByLabelText(/First name/), { target: { value: 'Ada' } });
     await fillAndOpenDialog();
-    confirmInDialog('Send confirmation email');
+    confirmInDialog('Send email');
     await screen.findByRole('heading', { name: 'Check your email' });
     first.unmount();
 
@@ -254,7 +255,7 @@ describe('resend', () => {
   it('asks again before sending the link a second time', async () => {
     renderForm();
     await fillAndOpenDialog();
-    confirmInDialog('Send confirmation email');
+    confirmInDialog('Send email');
     await screen.findByRole('heading', { name: 'Check your email' });
 
     // Sending spends the captcha token, so the resend button stays disabled

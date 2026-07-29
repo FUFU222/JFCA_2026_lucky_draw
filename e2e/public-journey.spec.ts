@@ -114,7 +114,7 @@ test('a visitor enters, confirms, and receives one number', async ({ page }) => 
   });
 
   await submit.click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Send confirmation email' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Send email' }).click();
   await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible();
 
   // Opening the link only offers the action; it must not issue a number.
@@ -179,7 +179,7 @@ test('an expired link sends the visitor back to the form', async ({ page }) => {
   const submit = page.getByRole('button', { name: 'Send confirmation email' });
   await expect(submit).toBeEnabled({ timeout: 15_000 });
   await submit.click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Send confirmation email' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Send email' }).click();
   await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible();
 
   const token = await verificationLinkFor(campaign.id);

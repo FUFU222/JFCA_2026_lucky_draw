@@ -104,14 +104,20 @@ export function ConfirmationDialog({
 
         <div className="mt-3 space-y-2 text-[15px] leading-relaxed text-neutral-700">{children}</div>
 
-        {/* Cancel comes first in the DOM so it reads first and takes focus. */}
+        {/*
+          Cancel comes first in the DOM so it reads first and takes focus.
+          Both carry real vertical padding rather than relying on `min-h-12`
+          alone: two lines of 16px text come to exactly 48px, so a label that
+          wraps would otherwise fill the button edge to edge with no room
+          around it.
+        */}
         <div className="mt-6 flex flex-col gap-2 sm:flex-row">
           <button
             ref={cancelRef}
             type="button"
             onClick={onCancel}
             disabled={busy}
-            className="min-h-12 flex-1 rounded-lg border border-neutral-300 px-5 text-base font-semibold text-neutral-800 disabled:opacity-60"
+            className="min-h-12 flex-1 rounded-lg border border-neutral-300 px-5 py-3 text-base font-semibold leading-snug text-neutral-800 disabled:opacity-60"
           >
             {cancelLabel}
           </button>
@@ -119,7 +125,7 @@ export function ConfirmationDialog({
             type="button"
             onClick={onConfirm}
             disabled={busy}
-            className={`min-h-12 flex-1 rounded-lg px-5 text-base font-semibold text-white disabled:opacity-60 ${
+            className={`min-h-12 flex-1 rounded-lg px-5 py-3 text-base font-semibold leading-snug text-white disabled:opacity-60 ${
               tone === 'brand'
                 ? 'bg-[var(--brand-accent)] hover:bg-[var(--brand-accent-hover)]'
                 : 'bg-neutral-900'

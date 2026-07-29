@@ -45,11 +45,14 @@ export const messages = {
       'A real entry already uses this address, so it cannot be used for a test run. Try a different address.',
   },
 
+  // The address is the only thing worth reading here, so the title asks the
+  // question, the address answers it, and one line covers the deadline. A
+  // sentence introducing the address only repeated the title, and a button
+  // repeating it a third time was long enough to wrap.
   sendDialog: {
     title: 'Send the confirmation email?',
-    body: 'We will send your confirmation link to:',
-    hint: 'Open it within 24 hours to get your number.',
-    confirm: 'Send confirmation email',
+    hint: 'The link works for 24 hours.',
+    confirm: 'Send email',
     cancel: 'Go back',
   },
 
@@ -58,9 +61,10 @@ export const messages = {
     body: 'If this address can enter, a confirmation link is on its way to it.',
     spam: 'No message after a few minutes? Check your spam folder.',
     resend: 'Send it again',
-    resendDialogTitle: 'Send the confirmation email again?',
-    resendDialogBody: 'We will send the same link to:',
-    resendDialogHint: 'You can request it up to three times in 24 hours.',
+    resendDialogTitle: 'Send the link again?',
+    // Keeps the one fact the visitor cannot guess — it is the same link, so an
+    // older email in their inbox still works.
+    resendDialogHint: 'The same link, up to three times in 24 hours.',
     resendDialogConfirm: 'Send again',
     resendDialogCancel: 'Go back',
     resendDone: 'If this address can enter, another link is on its way.',

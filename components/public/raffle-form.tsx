@@ -267,7 +267,6 @@ export function RaffleForm({
           onConfirm={resendEntry}
           tone="brand"
         >
-          <p>{submitted.resendDialogBody}</p>
           <p className="font-semibold break-all text-neutral-900">{draft.email.trim()}</p>
           <p>{submitted.resendDialogHint}</p>
         </ConfirmationDialog>
@@ -505,7 +504,6 @@ export function RaffleForm({
         onConfirm={submitEntry}
         tone="brand"
       >
-        <p>{sendDialog.body}</p>
         <p className="font-semibold break-all text-neutral-900">{draft.email.trim()}</p>
         <p>{sendDialog.hint}</p>
       </ConfirmationDialog>
