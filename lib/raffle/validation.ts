@@ -50,7 +50,10 @@ export const verificationRequestSchema = z
     eventSlug: z.string().min(1).max(100),
     email: emailField,
     termsConsent: z.literal(true),
-    turnstileToken: z.string().min(1).max(4096),
+    // Required unless a verified test-mode session waives it — see
+    // `RaffleService.requestVerification`, which is where that's enforced,
+    // since only the server can confirm the operator session that unlocks it.
+    turnstileToken: z.string().max(4096).optional().default(''),
     ipAddress: optionalText(64),
     firstName: optionalText(100),
     lastName: optionalText(100),
@@ -73,7 +76,7 @@ export const resendRequestSchema = z
   .object({
     eventSlug: z.string().min(1).max(100),
     email: emailField,
-    turnstileToken: z.string().min(1).max(4096),
+    turnstileToken: z.string().max(4096).optional().default(''),
     ipAddress: optionalText(64),
     isTest: z.boolean().optional(),
   })

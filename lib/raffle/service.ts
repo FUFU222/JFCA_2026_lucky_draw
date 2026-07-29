@@ -165,15 +165,21 @@ export class RaffleService {
     if (!parsed.success) return { accepted: false, reason: 'invalid' };
     const request = parsed.data;
 
-    if (!(await this.dependencies.turnstile.verify(request.turnstileToken, request.ipAddress))) {
-      return { accepted: false, reason: 'turnstile' };
-    }
-
     // Never trusted on the client's say-so alone: a claimed `isTest` only
     // takes effect once a real, current operator session is confirmed here.
     // Anyone else asking for it silently gets the ordinary flow instead of an
     // error, so the request behaves exactly like one that never sent the flag.
     const isTest = request.isTest === true && (await this.verifiedOperatorTestMode());
+
+    // A verified test-mode request skips the challenge entirely: the operator
+    // is already authenticated, and the form never even renders the widget
+    // for it, so there is no token to check.
+    if (!isTest) {
+      if (!request.turnstileToken) return { accepted: false, reason: 'invalid' };
+      if (!(await this.dependencies.turnstile.verify(request.turnstileToken, request.ipAddress))) {
+        return { accepted: false, reason: 'turnstile' };
+      }
+    }
 
     // The schedule is checked before any allowance is spent, so a visitor who
     // arrives while registration is shut is not also charged their daily quota.
@@ -247,11 +253,14 @@ export class RaffleService {
     if (!parsed.success) return { accepted: false, reason: 'invalid' };
     const request = parsed.data;
 
-    if (!(await this.dependencies.turnstile.verify(request.turnstileToken, request.ipAddress))) {
-      return { accepted: false, reason: 'turnstile' };
-    }
-
     const isTest = request.isTest === true && (await this.verifiedOperatorTestMode());
+
+    if (!isTest) {
+      if (!request.turnstileToken) return { accepted: false, reason: 'invalid' };
+      if (!(await this.dependencies.turnstile.verify(request.turnstileToken, request.ipAddress))) {
+        return { accepted: false, reason: 'turnstile' };
+      }
+    }
 
     const campaign = await this.dependencies.repository.getCampaignBySlug(request.eventSlug);
     if (!campaign || (!isTest && !isRegistrationOpen(campaign, this.now()))) {

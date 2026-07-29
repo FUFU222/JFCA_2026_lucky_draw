@@ -120,7 +120,9 @@ export function RaffleForm({
     setDraft((current) => ({ ...current, [key]: value }));
 
   const emailLooksUsable = /.+@.+\..+/.test(draft.email.trim());
-  const canSend = Boolean(captchaToken) && emailLooksUsable && draft.consent && status !== 'sending';
+  // Test mode never renders the widget below, so there is no token to wait on.
+  const canSend =
+    (isTestMode || Boolean(captchaToken)) && emailLooksUsable && draft.consent && status !== 'sending';
 
   async function post(path: string, body: Record<string, unknown>) {
     setError(null);
@@ -165,7 +167,7 @@ export function RaffleForm({
       date_of_birth: draft.dateOfBirth,
       country: draft.country,
       region: draft.region,
-      turnstile_token: captchaToken,
+      ...(isTestMode ? {} : { turnstile_token: captchaToken }),
       is_test: isTestMode,
     });
 
@@ -185,7 +187,7 @@ export function RaffleForm({
     // The screen never leaves the confirmation view while this is in flight.
     const accepted = await post(`/api/campaigns/${eventSlug}/entries/resend`, {
       email: draft.email.trim(),
-      turnstile_token: captchaToken,
+      ...(isTestMode ? {} : { turnstile_token: captchaToken }),
       is_test: isTestMode,
     });
     setStatus('submitted');
@@ -205,29 +207,31 @@ export function RaffleForm({
         {resendNote && <p className="text-sm text-neutral-700">{resendNote}</p>}
         {error && <p className="text-sm font-medium text-[#c8102e]">{error}</p>}
 
-        <div>
-          <TurnstileWidget
-            siteKey={turnstileSiteKey}
-            resetKey={captchaRound}
-            onToken={(token) => {
-              setCaptchaToken(token);
-              if (token) setCaptchaFailed(false);
-            }}
-            onError={() => {
-              setCaptchaToken(null);
-              setCaptchaFailed(true);
-            }}
-          />
-          {captchaFailed && (
-            <p className="mt-2 text-sm text-neutral-600" role="status">
-              {t.captchaFailed}
-            </p>
-          )}
-        </div>
+        {!isTestMode && (
+          <div>
+            <TurnstileWidget
+              siteKey={turnstileSiteKey}
+              resetKey={captchaRound}
+              onToken={(token) => {
+                setCaptchaToken(token);
+                if (token) setCaptchaFailed(false);
+              }}
+              onError={() => {
+                setCaptchaToken(null);
+                setCaptchaFailed(true);
+              }}
+            />
+            {captchaFailed && (
+              <p className="mt-2 text-sm text-neutral-600" role="status">
+                {t.captchaFailed}
+              </p>
+            )}
+          </div>
+        )}
 
         <button
           type="button"
-          disabled={!captchaToken || status === 'sending'}
+          disabled={(!isTestMode && !captchaToken) || status === 'sending'}
           onClick={() => setDialog('resend')}
           className="min-h-12 w-full rounded-lg border border-neutral-300 px-5 text-base font-semibold text-neutral-800 transition-colors hover:border-neutral-400 disabled:opacity-40"
         >
@@ -393,23 +397,25 @@ export function RaffleForm({
           </span>
         </label>
 
-        <div>
-          <TurnstileWidget
-            siteKey={turnstileSiteKey}
-            resetKey={captchaRound}
-            onToken={(token) => {
-              setCaptchaToken(token);
-              if (token) setCaptchaFailed(false);
-            }}
-            onError={() => {
-              setCaptchaToken(null);
-              setCaptchaFailed(true);
-            }}
-          />
-          <p className="mt-2 text-sm text-neutral-600" role="status">
-            {captchaFailed ? t.captchaFailed : captchaToken ? '' : t.captchaPending}
-          </p>
-        </div>
+        {!isTestMode && (
+          <div>
+            <TurnstileWidget
+              siteKey={turnstileSiteKey}
+              resetKey={captchaRound}
+              onToken={(token) => {
+                setCaptchaToken(token);
+                if (token) setCaptchaFailed(false);
+              }}
+              onError={() => {
+                setCaptchaToken(null);
+                setCaptchaFailed(true);
+              }}
+            />
+            <p className="mt-2 text-sm text-neutral-600" role="status">
+              {captchaFailed ? t.captchaFailed : captchaToken ? '' : t.captchaPending}
+            </p>
+          </div>
+        )}
 
         {error && (
           <p role="alert" className="text-sm font-medium text-[#c8102e]">
@@ -453,7 +459,8 @@ function TestModeBanner() {
       role="status"
       className="mb-6 rounded-lg border-2 border-dashed border-[var(--brand-accent)] bg-[var(--brand-tint)] px-4 py-3 text-sm font-semibold text-[var(--brand-accent)]"
     >
-      Test mode — this entry will not count toward the draw.
+      Test mode — this entry will not count toward the draw, and the captcha
+      check below is skipped.
     </div>
   );
 }

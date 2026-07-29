@@ -464,6 +464,38 @@ describe('RaffleService test mode', () => {
       }),
     ).resolves.toEqual({ accepted: false, reason: 'closed' });
   });
+
+  it('skips the Turnstile check entirely for a verified test-mode request, with no token sent at all', async () => {
+    const { service, repository } = buildService({
+      verifyOperatorSession: async () => true,
+      turnstile: {
+        verify: async () => {
+          throw new Error('Turnstile must not be asked to verify a test-mode request');
+        },
+      },
+    });
+
+    const result = await service.requestVerification({
+      ...validRequest,
+      turnstileToken: undefined,
+      isTest: true,
+    });
+
+    expect(result).toEqual({ accepted: true });
+    expect(repository.entries).toMatchObject([{ is_test: true }]);
+  });
+
+  it('still requires a real Turnstile pass when isTest is not verified, even if claimed', async () => {
+    const { service, repository } = buildService({
+      verifyOperatorSession: async () => false,
+      turnstile: { verify: async () => false },
+    });
+
+    await expect(
+      service.requestVerification({ ...validRequest, turnstileToken: undefined, isTest: true }),
+    ).resolves.toEqual({ accepted: false, reason: 'invalid' });
+    expect(repository.entries).toHaveLength(0);
+  });
 });
 
 describe('RaffleService confirmation', () => {
