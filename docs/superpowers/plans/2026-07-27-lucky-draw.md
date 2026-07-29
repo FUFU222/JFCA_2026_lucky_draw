@@ -1,5 +1,19 @@
 # Lucky Draw Implementation Plan
 
+> **Historical record — executed, and since superseded. Noted 2026-07-29.**
+>
+> Every task below shipped, but the product moved on afterwards. Do not build
+> anything from this document as though it described the system today: the
+> public side is now **English only** (no locale switcher, no bilingual
+> emails), the admin side is **Japanese only**, campaign control is four
+> one-tap actions (start / pause / resume / close) rather than a pause-resume
+> toggle, the outbox worker runs on **GitHub Actions every 5 minutes** rather
+> than Vercel Cron every minute (there is no `vercel.json`), and two features
+> here were never planned at all: **test mode** and `/admin/preview`.
+>
+> Read this for intent and for the reasoning behind the schema. Read
+> [docs/HANDOFF.md](../../HANDOFF.md) for what the system actually does.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Deliver the first reusable LIVAPON Lucky Draw event (`jfca-2026`): bilingual QR registration, email verification, non-duplicated sequential number issuance, number receipt email/page, and operator administration.

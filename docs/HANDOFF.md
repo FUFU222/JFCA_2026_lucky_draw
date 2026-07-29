@@ -1,297 +1,210 @@
-# Lucky Draw handoff — updated 2026-07-28 (session 2, plan complete)
+# Handoff — JFCA 2026 Lucky Draw
 
-## Repository and branch
+Updated 2026-07-29. Written for whoever picks this up next, agent or human.
 
-- Repository root: `/Users/fufu/code/JFCA2026_lucky_draw`
-- Active implementation worktree: `/Users/fufu/code/JFCA2026_lucky_draw/.worktrees/lucky-draw`
-- Branch: `codex/lucky-draw`
-- Do **not** work directly on `main`. `main` contains only the documented baseline.
-- The working tree is clean. **All eight plan tasks are committed.**
+The application is built, deployed and operational at
+`https://luckydraw.livapon.com`. What remains before the event is content and
+configuration, not code — see [Open items](#open-items).
 
-## Product decisions (authoritative)
+## Repository
 
-The full service design is [design.md](/Users/fufu/Downloads/design.md). The implementation plan is [2026-07-27-lucky-draw.md](superpowers/plans/2026-07-27-lucky-draw.md).
+- Root: `/Users/fufu/code/JFCA2026_lucky_draw`
+- Implementation worktree: `.worktrees/lucky-draw`, branch `codex/lucky-draw`
+- `main` is what deploys. The worktree branch is fast-forwarded into it, pushed,
+  then released with `vercel --prod --yes` from the repository root.
 
-- Public registration URL/QR target: `https://luckydraw.livapon.com/jfca-2026`.
-- Initial campaign: `jfca-2026`, `Japan Festival Canada 2026`, Toronto (`America/Toronto`). Seeded as `DRAFT` with dates unset.
-- Registration is open only in `SCHEDULED`, after `opens_at`, and before `draw_starts_at - 30 minutes`.
-- One case-insensitive, trimmed email per campaign. Confirmation link expires in 24 hours; total sends are max 3 in 24 hours, with a 2-minute cooldown.
-- Numbers are sequential/unbounded from 10000. A verification link must not issue a number on GET; the deliberate confirmation action is a POST.
-- Receipt links have no expiry. The receipt email shows the participant's number but never winner/loser status.
-- One required checkbox: `プライバシーポリシーおよび利用規約に同意する`; profile fields are optional and only country/region are collected (no street address).
-- Public UI is bilingual English/Japanese, English default. Admin is restricted to exact `@chairman.jp` email domain.
-- Transactional sender is `LIVAPON <info@chairman.jp>`; delivery domain setup is still a deployment task.
+## What it does
 
-## Completed work
+A visitor scans a QR code, submits their email address (plus optional profile
+fields), confirms through an emailed link, and is issued a permanent Lucky Draw
+number starting at 10000. The number page URL is a bearer token and never
+expires. Results are announced at the venue; the application holds no prize data
+and never says who won.
 
-| Task | Status |
+- **Visitor pages are English only.** The Japanese copy and the language
+  switcher were removed; migration `0007_english_only.sql` constrains
+  `raffle_entries.locale` to `'en'`. The column stays because the CSV export
+  still carries it.
+- **Admin pages are Japanese only**, at `/admin`, restricted to `@chairman.jp`
+  by Supabase magic link.
+- QR target: `https://luckydraw.livapon.com/jfca-2026`. Campaign `jfca-2026`,
+  Japan Festival Canada 2026, `America/Toronto`.
+- One case-insensitive address per campaign. Confirmation links expire in 24
+  hours; at most 3 sends per token in 24 hours, 2 minutes apart. Registration is
+  open only while `SCHEDULED`, after `opens_at`, and before
+  `draw_starts_at - 30 minutes`.
+
+## Where things are
+
+| Path | What lives there |
 | --- | --- |
-| 1. Next.js foundation, test/CI tooling | Complete |
-| 2. Supabase schema, seed, RPCs | Complete — **now actually verified against Postgres** |
-| 3. Numbers, tokens, validation, rate-limit abstraction | Complete |
-| 4. Registration / resend / confirmation services and routes | Complete, reviewed, committed |
-| 5. Email templates, Resend adapter, outbox retry worker, log mode | Complete, committed |
-| 6. Bilingual public pages, confirmation dialogs, Turnstile, terms | Complete, committed |
-| 7. `@chairman.jp` administration, search, CSV export, audit, pause/resume | Complete, committed |
-| 8. Operations docs, load test, production smoke suite | Complete, committed |
+| `app/[eventSlug]/` | The visitor's four pages: form, verify, number, terms |
+| `app/admin/` | Dashboard, entry search, CSV export, campaign controls, design preview |
+| `app/api/campaigns/` | The three public writes (entry, resend, confirm) |
+| `app/api/internal/email-outbox/` | Retry worker endpoint, called by GitHub Actions |
+| `lib/raffle/service.ts` | The state machine. Every decision about who gets a number is here |
+| `lib/db/server.ts` | The Supabase adapter, `server-only`, service-role |
+| `lib/admin/` | Dashboard queries, audit log, CSV |
+| `lib/security/` | Operator session, `@chairman.jp` check, Turnstile |
+| `lib/config/startup.ts` | Boot-time configuration guard, via `instrumentation.ts` |
+| `supabase/migrations/` | 0001–0007. The RPCs are where the concurrency safety lives |
+| `emails/` | React Email templates, English only |
 
-Commits added in session 2:
+## The parts that are easy to get wrong
 
-- `73339ad` `fix: make the raffle schema apply and reach the server role`
-- `6ba6266` `feat: add verified raffle entry flow`
-- `66ffd07` `fix: close the gaps an adversarial review found in the entry flow`
-- `230f7b5` `feat: add raffle email templates and durable delivery`
-- `275d43d` `fix: fail a misconfigured deployment at boot, not at first message`
-- `2cce897` `fix: retire outbox work that no retry could ever deliver`
-- `95eacb9` `feat: build the public raffle experience`
-- `f7e5a31` `feat: add raffle operator administration`
-- `332b68f` `docs: add lucky draw release runbook`
+**Numbers are issued inside `confirm_raffle_verification`**, not in application
+code. It locks the campaign row, reads the counter, increments it, and writes
+the entry in one transaction, so two simultaneous confirmations of the same link
+return the same number rather than two. Do not move this into TypeScript.
 
-### What session 2 found in "reviewed" Task 2 work
+**Tokens are never stored.** A verification link is
+`HMAC(VERIFICATION_TOKEN_SECRET, "verification:" + token_row_id)`; a receipt link
+is `HMAC(RECEIPT_TOKEN_SECRET, verification_token)`. Only SHA-256 hashes go in
+the database. This is what lets a resend reproduce the same link without the
+plaintext ever being written down. Rotating `RECEIPT_TOKEN_SECRET` after launch
+breaks every receipt link already sitting in a visitor's inbox.
 
-Docker was unavailable when Task 2 was written, so `0001_lucky_draw.sql` had
-**never been executed**. It could not be:
+**Mail is inline first, durable second.** The visitor at the booth gets their
+link immediately; if Resend refuses, the message is armed in `email_outbox` and
+the GitHub Actions worker retries every 5 minutes. A send allowance is spent per
+message, not per attempt, so a provider outage does not cost a visitor one of
+their three sends.
 
-- `consume_raffle_rate_limit` declared a parameter named `limit`, a reserved SQL
-  keyword. The migration aborted with SQLSTATE 42601. All arguments now carry a
-  `p_` prefix, and the RPC callers were updated to match.
-- Supabase no longer grants table DML to `service_role` by default, so the
-  server could not read or write its own tables. The grant is now explicit.
-- Vitest does not populate `process.env` from dotenv files, so the documented
-  `.env.test.local` setup left the schema suite skipping forever.
-  `tests/setup.ts` loads it now.
+**Test mode is verified server-side, twice.** `?test=1` only does anything for a
+signed-in operator, and `RaffleService` re-checks the operator session before
+honouring the flag — a client claiming `is_test` on its own silently gets the
+ordinary flow, captcha and all.
 
-**Lesson worth keeping:** a skipped database suite reads exactly like a passing
-one. `tests/supabase-env.ts` now throws in CI when credentials are absent, and
-`.github/workflows/ci.yml` starts local Supabase so the migrations are applied
-on every push.
+**The operator session needs three things**: an `@chairman.jp` address, a
+confirmed email, and a prior `ADMIN_LOGIN` audit row. The third closes the
+anon-key self-signup path, and it means the first sign-in for any account has to
+go through the real magic-link flow.
 
-## Task 4 as delivered
+## Test mode, in full
 
-- `lib/raffle/service.ts` — `RaffleService` owns every decision and validates
-  its own arguments with Zod (`lib/raffle/validation.ts`). Route handlers only
-  reshape the request.
-- `lib/db/server.ts` — `SupabaseRaffleRepository`, server-only, service-role.
-- `supabase/migrations/0002_raffle_entry_flow.sql` — `claim_verification_send`,
-  `claim_email_outbox_job_for_entry`, `complete_email_outbox_job`, and a
-  replacement `confirm_raffle_verification(p_token_hash, p_receipt_token_hash,
-  p_event_slug)`.
-- Routes: `POST /api/campaigns/[eventSlug]/entries`, `.../entries/resend`,
-  `.../verify/confirm`, plus `app/api/campaigns/_shared.ts` for the shared
-  response mapping.
+Added because rehearsing the journey previously meant creating real entries.
 
-Properties that are enforced rather than assumed:
+- Entered by following **テストモードで開く** on the dashboard, i.e.
+  `/{eventSlug}?test=1` with an operator session.
+- Numbers come from `campaigns.test_next_number`, starting at 900000001, so they
+  can never collide with a visitor's.
+- Excluded from the dashboard counts, the 送信待ちメール数 gauge and the CSV
+  export. Shown in 最近の応募 and 応募一覧 with a テスト badge.
+- Skips the schedule, the rate limits and the captcha, so a rehearsal works
+  before opening, after closing and while paused.
+- **Resubmitting the same address resets the previous rehearsal** and re-runs
+  the whole journey, including a new verification email and a new receipt email.
+  `resetTestEntry` clears the entry's `email_outbox` rows as part of this —
+  without that the receipt job stays at `SENT` and every rehearsal after the
+  first issues a number on screen while silently sending no receipt.
+- **A rehearsal on an address a real entry holds is refused**
+  (`test_address_conflict`, HTTP 409), because overwriting that row would move a
+  genuine entrant into the test number range and drop them from the draw. The
+  reverse is allowed: a real submission takes an address back from a rehearsal.
 
-- The 2-minute cooldown and the 3-send ceiling are taken under a row lock, not
-  read-then-incremented in the process.
-- The receipt outbox lease uses `FOR UPDATE SKIP LOCKED`, and completion is
-  fenced by the lease that claimed it.
-- The event slug and campaign schedule are checked **inside** the confirmation
-  transaction, so a link posted to the wrong event cannot consume a token or
-  issue a number.
-- `RD001` means the link is unusable and the visitor is told so; `RD002` means
-  the receipt secret was rotated and is an operator fault that surfaces as a
-  server error rather than a fake "invalid link".
-- Addresses are matched with `eq`, never `ilike` — `_` and `%` in an address are
-  pattern wildcards.
-- Two concurrent first submissions both succeed; the unique index settles which
-  row exists.
+## Verification status
 
-## Test suites
+On 2026-07-29 every public and admin route was walked by hand against a local
+database, in a mobile viewport for the visitor's pages. Confirmed working: all
+five schedule states, with the page and the API agreeing in each; consumed,
+malformed and unknown tokens; the 30-minute pre-draw cut-off; the per-address
+rate limit and the per-token send cooldown; non-disclosing responses on resend;
+every admin route refusing an unauthenticated caller; all four campaign actions
+with their audit rows; search, CSV export and the preview page.
 
-178 unit and integration tests, plus 12 Playwright specs (public journey and
-admin) and a 9-spec read-only production smoke suite. All passing.
+Five defects were found and fixed in `cf1c1d6` — that commit message describes
+each one and why it mattered.
 
-- `tests/unit/*` — numbers, tokens, validation, rate limiter, campaign config.
-- `tests/integration/schema.test.ts` — tables, constraints, and every RPC,
-  against real Postgres.
-- `tests/integration/raffle-repository.test.ts` — the real Supabase adapter and
-  the service end to end, against real Postgres. **This is the suite that would
-  have caught the broken migration.** Keep it; do not replace it with fakes.
-- `tests/integration/raffle-service.test.ts` — service decisions with an
-  in-memory repository that mirrors the atomic steps the SQL actually provides.
-- `tests/integration/raffle-routes.test.ts` — handler shaping and status mapping.
-- `tests/unit/emails.test.ts` — both templates in both locales, including that
-  neither says anything about winning or losing.
-- `tests/unit/mailer.test.ts`, `tests/unit/startup.test.ts` — delivery mode
-  selection and the boot-time configuration check.
-- `tests/integration/email-outbox.test.ts`,
-  `tests/integration/email-outbox-route.test.ts` — the worker and its endpoint.
-- `tests/unit/confirmation-dialog.test.tsx` — focus, Escape, Tab trapping, and
-  that the action button names the action.
-- `tests/unit/raffle-form.test.tsx` — field order, required inputs, the captcha
-  gate, draft recovery, and both dialogs.
-- `e2e/public-journey.spec.ts` — the real form in both languages, the two-step
-  confirmation, the number page, a used link, and an expired link.
-- `e2e/admin.spec.ts` — a real magic-link sign-in read out of the local mail
-  catcher, the domain refusal, pause/resume, export, and search.
-- `e2e/production-smoke.spec.ts` — read-only, skipped unless `SMOKE_BASE_URL`
-  is set.
-- `tests/unit/admin-authorization.test.ts`, `tests/unit/admin-csv.test.ts`,
-  `tests/unit/limits.test.ts`, `tests/integration/admin-*.test.ts`.
+`pnpm test` is 186 cases across 23 files. `pnpm test:e2e` is 19 Playwright
+specs: 5 public journey, 6 admin, 8 read-only production smoke.
 
-`vitest.config.ts` sets `fileParallelism: false`: the integration suites share
-one database and the global outbox claim will lease another file's job.
-
-## Task 5 as delivered
-
-- `emails/` — bilingual React Email templates plus one inline style module.
-  `lib/email/templates.ts` renders HTML and a plain-text alternative and owns
-  the subject lines and the `LIVAPON <info@chairman.jp>` sender.
-- `lib/email/mailer.ts` — `createRaffleMailer()` picks the Resend adapter or
-  `LoggingRaffleMailer` from `MAIL_DELIVERY_MODE`.
-- `lib/email/outbox.ts` — `EmailOutboxProcessor`: claim, deliver, record,
-  complete. Backoff doubles per attempt to a six-hour cap, the run has a
-  25-second budget checked *before* claiming, and work no retry could satisfy
-  ends `CANCELLED` rather than failing forever.
-- `app/api/internal/email-outbox/route.ts` + `vercel.json` — the per-minute
-  worker, `Bearer ${CRON_SECRET}` compared in constant time, GET and POST.
-- `instrumentation.ts` + `lib/config/startup.ts` — one boot-time check that
-  refuses log mode in production, a Cloudflare test secret, or any missing
-  production variable.
-- Migrations `0003` (`arm_email_outbox_job`) and `0004` (`CANCELLED` state and
-  the outcome-taking `complete_email_outbox_job`).
-
-Delivery is inline first and durable second: a visitor at the venue gets their
-link immediately, and only a refused send is handed to the worker. A send
-allowance is therefore spent on the *message*, not on the attempt.
-
-`@react-email/components` was installed and removed — its latest release is
-deprecated because react-email 6 exports the components and the renderer from
-the package already in use.
-
-## Task 6 as delivered
-
-- `app/[eventSlug]/` — entry form, `terms`, `verify/[token]`, `number/[token]`.
-  `app/page.tsx` forwards the bare domain to the active event.
-- `components/public/` — form, locale switcher, Turnstile widget, verification
-  confirmation, number receipt, page shell.
-- `components/ui/confirmation-dialog.tsx` — the one dialog used in front of both
-  irreversible actions.
-- `lib/i18n/` — every visitor-facing string, the locale cookie, and the country
-  list. `lib/campaign/legal.ts` holds the versioned terms.
-
-Properties worth keeping:
-
-- A GET of the verification link never mutates. `verificationLinkState` only
-  reads; the number is issued by the POST behind the visitor's action.
-- The country options are resolved on the server. Node's ICU data and the
-  browser's disagree, and recomputing them client-side broke hydration.
-- The draft is restored after mount, not during the first render, for the same
-  reason. The locale is a cookie so the server renders the right language
-  immediately.
-- The receipt page renders the number and nothing else — no profile editing and
-  no statement about winning.
-
-### What Task 6 uncovered in earlier work
-
-- **Tailwind had never been wired up.** `@tailwindcss/postcss` and
-  `postcss.config.mjs` were missing since Task 1. With no UI in the repo, every
-  check passed and the styles simply did nothing.
-- **Testing Library's automatic cleanup was not running**, because it only
-  registers itself when Vitest globals are enabled. `tests/setup.ts` now calls
-  `cleanup` in an `afterEach`.
-
-## Tasks 7 and 8 as delivered
-
-- `lib/security/admin.ts` — domain-only authorization, a strict pattern rather
-  than a suffix check, ASCII-only so a homoglyph domain cannot match. Checked
-  before the sign-in link is requested and again after the callback; a session
-  that fails the second check is signed out, not merely refused.
-- `app/admin/*`, `components/admin/*` — dashboard, entry search, CSV export,
-  pause/resume. Every one of them requires an operator session server-side.
-- `lib/admin/csv.ts` — RFC 4180, UTF-8 BOM, and a prefix on values a spreadsheet
-  would execute as a formula.
-- `lib/admin/audit.ts` — login, export, pause and resume are recorded with the
-  actor and the row count, never the exported rows.
-- `docs/operations/` — pre-launch checklist and on-site runbook.
-- `scripts/load-test.mjs`, `e2e/production-smoke.spec.ts`.
-
-### The venue network problem
-
-The per-IP allowance was 20 per day. Hundreds of visitors at a festival share
-the venue wifi and a few carrier NAT addresses, so the twenty-first genuine
-entrant would have been rate limited and the event would have looked broken.
-The default is now 500 and both allowances are environment-configurable
-(`RAFFLE_IP_REQUEST_LIMIT`, `RAFFLE_EMAIL_REQUEST_LIMIT`) so they can be raised
-during the event without a deploy. **This is the first thing to check if
-visitors report "Too many attempts".**
-
-### Two Supabase settings that are easy to miss
-
-Both were found by driving the real sign-in flow, and both apply to production:
-
-- `auth.additional_redirect_urls` must contain the deployed
-  `/auth/callback`, or Supabase silently sends the operator to the project's
-  default site URL instead.
-- `auth.rate_limit.email_sent` is per hour and defaults to 2. Local is raised to
-  200 for the E2E suite; production should stay low.
-
-## Known gaps, deliberately deferred
+## Open items
 
 1. **The Lucky Draw terms still need legal sign-off.** `lib/campaign/legal.ts`
-   states the clauses the service design specifies, under the version
-   `jfca-2026-terms-v1-placeholder`. When the final wording lands, bump that
-   version and `supabase/seed.sql` together so a recorded consent always points
-   at the text that was shown.
+   carries placeholder wording under `jfca-2026-terms-v1-placeholder`, and the
+   production campaign row still has that version. When the final text lands,
+   bump the constant and the campaign's `terms_version` in the same change, so a
+   recorded consent always points at the text that was shown.
 2. **A resend after the link expired sends nothing** and the acknowledgement
-   page does not yet say "submit the form again". The service behaviour matches
-   the spec; the wording gap is real.
-3. **The per-IP limit trusts `x-real-ip` / `x-forwarded-for`.** Confirm in Task 8
-   that the deployment edge overwrites both; if it does not, the limit is
-   bypassable.
+   page does not say "submit the form again". The service behaviour is
+   intentional; the wording gap is real. The *verify* page was fixed; only the
+   resend acknowledgement is still silent.
+3. **The per-IP limit trusts `x-real-ip` / `x-forwarded-for`.** Confirm Vercel
+   overwrites both on ingress; if it does not, the limit is bypassable.
 4. **The Resend send is raced against a 10-second timeout, not cancelled.** A
-   request that wins the race after the timeout may already have delivered, so a
-   retry can duplicate a message. Duplicates are preferred to losses.
-5. **Confirmation is refused once `draw_starts_at` passes or the campaign is
-   `CLOSED`.** Decided in session 2 and confirmed by the operator. `PAUSED`
-   deliberately does **not** block confirmation, because pausing is about intake.
-6. **The E2E suite needs `.env.local`** and skips without it, so CI does not run
-   it yet. Task 8 should decide whether CI gets its own Turnstile test key and
-   Supabase stack for the browser journey.
-7. **Cron reliability is unverified.** `vercel.json` and `CRON_SECRET` are only
-   exercised by unit tests; Task 8 must confirm the schedule actually fires in
-   the deployed project.
+   request that wins after the timeout may already have delivered, so a retry
+   can duplicate a message. Duplicates are preferred to losses.
+5. **E2E does not run in CI.** `.github/workflows/ci.yml` runs `pnpm test` only,
+   because the browser suite needs a Supabase stack and a Turnstile test key.
+6. **Staging cannot be a Vercel deployment** as previously documented — every
+   Vercel build is `NODE_ENV=production`, which the startup guard and the
+   Turnstile check both key on. See `docs/operations/staging.md`; test mode now
+   covers most of what staging was for.
+7. **A submit race can leave two live verification links for one entry.** Narrow
+   window, and the issued number stays correct, but the second link then returns
+   a 500 for its full 24-hour lifetime instead of "link cannot be used". Not
+   fixed: the fix is in SQL, and the race needs two requests for a brand-new
+   address to interleave within milliseconds.
+8. **Profile fields on an unverified entry can be overwritten** by anyone
+   resubmitting that address. Bounded by the 5/day per-address limit, cannot
+   yield a number, and is inherent to an email-keyed form that stores the
+   profile before verification.
+9. **The visitor's form leads with the optional profile section**, so the only
+   required field is more than a screen down on a phone. Whether to reorder it
+   is a product tradeoff — entry completion against profile data volume — and
+   has not been decided.
 
-## Remaining plan (Tasks 5 and 6 are done)
+## Things that surprised previous sessions
 
-7. `@chairman.jp` Supabase magic-link administration, dashboard, search, CSV
-   export/audit, pause/resume confirmation, admin E2E.
-8. Vercel/Supabase/Resend/Turnstile operational docs, load test, Toronto QR/TLS
-   manual checks, on-site runbook.
+- `limit` is a reserved word in PL/pgSQL, hence the `p_`-prefixed arguments on
+  `consume_raffle_rate_limit`.
+- Supabase's `db push` prints a catalog-cache warning that looks like a failure
+  and is not; `migration list` confirms the real state.
+- A trailing newline on a pasted Vercel environment variable took production
+  down once. `parseMailDeliveryMode` now trims.
+- `playwright.config.ts` sets `reuseExistingServer: false` on port 3001, so a
+  stray `next dev` there fails the whole suite.
+- The admin magic link must be requested from the login form, not the Auth API
+  directly: the form's browser client sets the PKCE verifier cookie that
+  `/auth/callback` needs, and a link requested any other way comes back as an
+  implicit-flow token the callback deliberately refuses.
+- Supabase Auth sends the operator sign-in mail itself, not Resend. Its
+  project-wide limit was raised from 2 to 30 per hour; the 60-second
+  per-address cooldown is not configurable.
 
 ## Environment
 
-Node 22 and pnpm 11.9 are pinned (`.nvmrc`, `package.json`). Session 2 ran on
-Node 24 and everything passed, but engine warnings appear; use the pinned
-version for final verification.
-
-Docker is required for the database suites:
+Node 22 and pnpm 11.9 are pinned (`.nvmrc`, `package.json`); newer Node works
+but prints engine warnings. Docker is required for the database suites.
 
 ```bash
 cd /Users/fufu/code/JFCA2026_lucky_draw/.worktrees/lucky-draw
-open -a Docker
-pnpm exec supabase start
-pnpm exec supabase db reset
-pnpm test
+open -a Docker && pnpm exec supabase start && pnpm exec supabase db reset
+pnpm test && pnpm typecheck && pnpm lint
 ```
 
-`.env.test.local` is gitignored and holds the local Supabase URL and keys that
-`pnpm exec supabase status -o json` prints.
+`.env.local` and `.env.test.local` are gitignored; the local Supabase values
+come from `pnpm exec supabase status -o json`. Local mail lands in Mailpit at
+`http://127.0.0.1:54324`.
 
 ## Assets and legal inputs
 
-- Cropped horizontal logo ready for mobile use: `assets/LIVAPON_logo_horizontal_cropped.png`.
-- Original input: `assets/LIVAPON_logo_horizontal_350x.png`.
-- Official privacy policy: `https://livapon.com/policies/privacy-policy`.
-- Event-specific Lucky Draw Terms still need final legal wording before public
-  launch. Keep them versioned in one configuration module when Task 6 lands.
+- Logo in use: `assets/LIVAPON_logo_horizontal_cropped.png`
+  (original: `assets/LIVAPON_logo_horizontal_350x.png`).
+- Privacy policy: `https://livapon.com/policies/privacy-policy`.
+- Lucky Draw Terms live in `lib/campaign/legal.ts` and still need final wording.
 
-## Recommended first commands for the next session
+## The operational documents
 
-```bash
-cd /Users/fufu/code/JFCA2026_lucky_draw/.worktrees/lucky-draw
-git log --oneline --decorate -8
-open -a Docker && pnpm exec supabase start && pnpm exec supabase db reset
-pnpm test && pnpm typecheck && pnpm lint && pnpm build
-```
+- [prelaunch-checklist.md](operations/prelaunch-checklist.md) — everything that
+  must be true before the QR code is printed.
+- [on-site-runbook.md](operations/on-site-runbook.md) — what the operator does
+  at the venue. Names every control exactly as it appears on screen.
+- [staging.md](operations/staging.md) — the load test, and why staging is not a
+  Vercel deployment.
+
+The original implementation plan,
+[superpowers/plans/2026-07-27-lucky-draw.md](superpowers/plans/2026-07-27-lucky-draw.md),
+is a historical record: it was executed and then superseded by test mode, the
+English-only public side, the Japanese admin side, one-tap campaign controls and
+the GitHub Actions worker. Read it for intent, not for current behaviour.

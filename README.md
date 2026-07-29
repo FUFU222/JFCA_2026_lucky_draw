@@ -2,6 +2,17 @@
 
 The QR raffle registration application for JFCA 2026.
 
+A visitor scans a QR code, submits their address, confirms it through an emailed
+link, and is issued a permanent Lucky Draw number. Results are announced at the
+venue; the application holds no prize data and never says who won.
+
+- **Visitor pages are English only.** The Japanese copy and the language
+  switcher were removed; `raffle_entries.locale` is constrained to `'en'`.
+- **Admin pages are Japanese only**, restricted to `@chairman.jp` addresses via
+  a Supabase magic link.
+- Production: `https://luckydraw.livapon.com`, deployed on Vercel, backed by
+  Supabase project `eyysljemlsghdxjaxjbn`.
+
 ## Prerequisites
 
 - Node.js 22.x (see `.nvmrc`)
@@ -20,7 +31,13 @@ Docker must be running before `pnpm exec supabase start`. The command prints a l
 NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon key printed by Supabase>
 SUPABASE_SERVICE_ROLE_KEY=<service_role key printed by Supabase>
+VERIFICATION_TOKEN_SECRET=<any long string>
+RECEIPT_TOKEN_SECRET=<any long string>
 ```
+
+The two secrets are only needed by the end-to-end suite, which rebuilds an
+emailed link from the token row id the same way the mailer does. Without them
+`e2e/public-journey.spec.ts` skips itself.
 
 Do not commit `.env.test.local`.
 
@@ -99,9 +116,53 @@ where slug = 'jfca-2026';
 With `MAIL_DELIVERY_MODE=log`, the confirmation link is printed to the server
 console, so the whole journey can be walked without a mailbox.
 
+### The admin screens locally
+
+`/admin` needs a signed-in operator, and `getOperatorSession()` accepts an
+account only if its address is `@chairman.jp`, its email is confirmed, **and**
+it already has an `ADMIN_LOGIN` audit row — so the session has to be created by
+walking the real magic-link flow at least once.
+
+Local Supabase captures outgoing mail in Mailpit at `http://127.0.0.1:54324`,
+so sign in at `/admin/login`, open the newest message there, and follow the
+link. Request the link from the form rather than the Auth API directly: the
+form's browser client sets the PKCE verifier cookie that `/auth/callback`
+needs, and a link requested any other way comes back as an implicit-flow token
+the callback deliberately refuses.
+
+### Test mode
+
+With an operator session, `/{eventSlug}?test=1` runs the real journey with
+every entry marked `is_test`. Requested without a session it silently serves
+the ordinary page, and the flag is re-verified server-side before anything is
+written, so it grants nothing on its own.
+
+A test entry takes its number from a separate sequence starting at
+`900000001`, skips the schedule, the rate limits and the captcha, and is
+excluded from the dashboard counts and the CSV export. Submitting the same
+address again resets the previous rehearsal and re-runs the whole journey,
+including both emails, so one address can be reused indefinitely. Submitting a
+test entry on an address a real entry already holds is refused rather than
+overwriting that entrant.
+
+`/admin/preview` renders the number-reveal screen on demand, with no entry and
+no email, for checking the animation alone.
+
 ### End-to-end tests
 
-Install the Playwright Chromium browser once with `pnpm exec playwright install chromium`. `pnpm test:e2e` starts the Next.js development server automatically and runs `e2e/public-journey.spec.ts`, which drives the real form, the confirmation dialog, and the number page against the local database. It skips when `.env.local` is absent.
+Install the Playwright Chromium browser once with
+`pnpm exec playwright install chromium`. `pnpm test:e2e` runs everything under
+`e2e/`, starting its own development server on **port 3001** (it refuses to
+reuse a running one, so stop any `next dev` on that port first):
+
+- `public-journey.spec.ts` — the real form, the confirmation dialog, and the
+  number page against the local database.
+- `admin.spec.ts` — sign-in, the campaign controls, search, and the export.
+- `production-smoke.spec.ts` — read-only checks against a deployed origin. It
+  only runs when `SMOKE_BASE_URL` is set, which also suppresses the local
+  server; `SMOKE_EVENT_SLUG` overrides the slug it looks for (`jfca-2026`).
+
+Individual specs skip themselves when the environment they need is absent.
 
 ## Quality checks
 
@@ -132,6 +193,15 @@ nothing has to keep a bearer token around to make a retry possible.
   Production refuses it at startup rather than silently swallowing every
   message.
 
+Surrounding whitespace is trimmed before the value is checked, because pasting
+into the Vercel dashboard leaves a trailing newline often enough that a stray
+`"send\n"` once took every mail-sending route in production down at boot.
+
+The **operator sign-in link does not go through Resend.** It is sent by Supabase
+Auth's built-in sender (`noreply@mail.app.supabase.io`), which has its own
+limits: 30 emails an hour project-wide, raised from the default of 2, plus a
+60-second cooldown per address that cannot be configured.
+
 `.github/workflows/email-outbox.yml` calls the worker every 5 minutes — GitHub
 Actions' shortest supported interval, and independent of the Vercel plan tier,
 which matters because Vercel Cron on the Hobby plan runs at most once a day.
@@ -150,7 +220,7 @@ pnpm email:preview
 
 ## Going live
 
-Two documents own the deployment:
+Three documents own the deployment:
 
 - [docs/operations/prelaunch-checklist.md](docs/operations/prelaunch-checklist.md)
   — Supabase, Resend, Turnstile, Vercel, the legal wording, the event schedule,
@@ -177,6 +247,30 @@ pnpm load-test --url https://staging.example.com --rate 100 --seconds 30
 The target is 100 verification requests per second with no server errors, no
 duplicate numbers, and a controlled 429 for traffic over the limit. The script
 prints the SQL to check for duplicates and to clean up afterwards.
+
+## Environment variables
+
+`lib/config/startup.ts` runs at boot through `instrumentation.ts` and refuses to
+start a production deployment that is missing any of the required values, so a
+mistake is a failed deploy rather than a silent one.
+
+| Variable | Required | What it is for |
+| --- | --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL` | yes | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes | Browser client, used only by the operator sign-in |
+| `SUPABASE_SERVICE_ROLE_KEY` | yes | Every data path; server-only, never reaches the browser |
+| `NEXT_PUBLIC_APP_URL` | yes | Origin baked into the emailed links |
+| `RESEND_API_KEY` | yes | Transactional mail — still required in `log` mode |
+| `RAFFLE_EMAIL_FROM` | no | Sender, defaults to `LIVAPON <info@chairman.jp>` |
+| `TURNSTILE_SECRET_KEY` | yes | Server-side captcha check; production refuses Cloudflare's test secrets |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | yes | Captcha widget |
+| `VERIFICATION_TOKEN_SECRET` | yes | Derives the confirmation link |
+| `RECEIPT_TOKEN_SECRET` | yes | Derives the permanent number-page link |
+| `CRON_SECRET` | yes | Bearer credential for the outbox retry worker |
+| `MAIL_DELIVERY_MODE` | no | `send` (default) or `log` |
+| `RAFFLE_IP_REQUEST_LIMIT` | no | Writes per IP per 24h, default 500 — the venue-network lever |
+| `RAFFLE_EMAIL_REQUEST_LIMIT` | no | Writes per address per 24h, default 5 |
+| `SMOKE_BASE_URL` / `SMOKE_EVENT_SLUG` | no | Point the smoke suite at a deployed origin |
 
 ## Token secrets
 

@@ -9,8 +9,11 @@ printed, the URL it points at cannot be changed.
 ## 1. Supabase project
 
 - [ ] Create the production project and note its URL, anon key, and service-role key.
+      The project in use for this event is **`eyysljemlsghdxjaxjbn`**.
 - [ ] Apply the schema: `pnpm exec supabase link --project-ref <ref>` then
-      `pnpm exec supabase db push`. Confirm all four migrations applied.
+      `pnpm exec supabase db push`. Confirm every migration in
+      `supabase/migrations/` applied — `pnpm exec supabase migration list` should
+      show the same list locally and remotely.
 - [ ] Insert the campaign (see the SQL in [README.md](../../README.md)). It is
       created `DRAFT` with no dates on purpose.
 - [ ] **Auth → Providers → Email: turn "Confirm email" ON.** With it off, anyone
@@ -28,13 +31,25 @@ printed, the URL it points at cannot be changed.
 - [ ] Auth → URL configuration: add `https://luckydraw.livapon.com/auth/callback`
       to the redirect allow list. Without it the operator sign-in link silently
       lands on the project's default site URL.
-- [ ] Auth → Rate limits: leave the hourly email limit low. Operator sign-ins are
-      rare, and a high limit is a mail-bombing lever.
-- [ ] **Auth → SMTP: configure a real sender.** The operator sign-in link is sent
-      by Supabase, not by Resend. The built-in sender is rate limited to a
-      handful of messages an hour and frequently lands in spam, so an operator
-      who cannot sign in during the event has no way in. Point it at the same
-      provider as the transactional mail and send a test.
+- [ ] Auth → Rate limits: confirm **"Rate limit for sending emails" is 30 per
+      hour**. It was deliberately raised from Supabase's default of 2, which is
+      low enough that a couple of sign-in attempts lock everyone out for the
+      rest of the hour. Supabase also enforces a **60-second cooldown per
+      address** that is not configurable here: an operator who asks for a second
+      link too soon gets nothing and no error, so tell them to wait a minute
+      rather than keep pressing the button.
+- [ ] Auth → SMTP: **left on Supabase's built-in sender on purpose.** The
+      operator sign-in link comes from Supabase, not from Resend, and arrives
+      from `noreply@mail.app.supabase.io`. Supabase documents that sender as
+      best-effort with no delivery SLA, which is acceptable here because only a
+      few staff ever sign in and 30/hour covers them. If sign-in mail starts
+      landing in spam, the fix is to point Auth → SMTP at the same provider as
+      the transactional mail — but do not do it pre-emptively: a custom sender
+      starts at its own 30/hour limit and needs its own domain verification.
+- [ ] **Have every operator sign in once, before the event**, on the device they
+      will use on the day. `getOperatorSession()` only trusts an account that
+      already has an `ADMIN_LOGIN` audit row, so the very first sign-in is the
+      one that must not happen under time pressure.
 
 ## 2. Resend
 
@@ -111,7 +126,11 @@ step in [on-site-runbook.md](on-site-runbook.md). Cancel by **2026-08-31**.
       bumped from `jfca-2026-terms-v1-placeholder` in the **same** change as the
       campaign's `terms_version`, so a stored consent always points at the text
       that was shown.
-- [ ] Both languages read by a native speaker of each.
+- [ ] Every visitor-facing string read by a native English speaker. The public
+      side is **English only** — the Japanese copy and the language switcher
+      were removed, and `raffle_entries.locale` is constrained to `'en'`.
+- [ ] The admin screens read by a Japanese speaker. That surface is **Japanese
+      only**, and it is what the on-site runbook names its controls after.
 
 ## 6. Event schedule
 
@@ -136,7 +155,9 @@ where slug = 'jfca-2026';
 - `CLOSED` — finished. Confirmation is refused as well as entry.
 
 Confirmation is also refused once `draw_starts_at` passes, so a number can never
-be issued after the draw has begun.
+be issued after the draw has begun. Test-mode entries are the one exception —
+they are exempt from both the schedule and this cut-off on purpose, so a
+rehearsal works before opening and after closing.
 
 ## 7. Before the QR code is printed
 
@@ -149,14 +170,25 @@ be issued after the draw has begun.
 - [ ] A resend requested, and the cooldown message seen.
 - [ ] Operator sign-in with a `@chairman.jp` address, and an address outside the
       domain refused.
-- [ ] Pause, resume, and close each exercised, and all three seen in the audit
-      log. Close is one-way from the dashboard, so exercise it last, on a
-      throwaway campaign or right at the true end of this checklist.
-- [ ] Test mode walked end to end: open **Open in test mode** from the
-      dashboard, submit and confirm a real entry, and confirm the number
-      lands at 900000001+ and never appears in the verified/pending counts or
-      the CSV export — only in Recent entries and Entries search, badged
-      `TEST`.
+- [ ] 今すぐ受付を開始, 受付を一時停止, 受付を再開 and 受付を終了 each exercised,
+      and all four seen in the audit log. 受付を終了 is one-way from the
+      dashboard, so exercise it last, on a throwaway campaign or right at the
+      true end of this checklist. Check the state line reads 一時停止中 while
+      paused, not 受付終了.
+- [ ] Test mode walked end to end: follow **テストモードで開く** from the
+      dashboard, submit and confirm an entry, and confirm the number lands at
+      900000001+ and never appears in the 確認済み応募数 / 確認待ち counts or the
+      CSV export — only in 最近の応募 and 応募一覧, badged テスト.
+- [ ] The **same test address submitted a second time**, and the whole journey
+      re-run on it: the entry returns to 確認待ち, a fresh verification email
+      arrives, the next number is 900000002, **and a second receipt email
+      arrives**. This is the case that regressed once; the number appearing on
+      screen does not prove the mail went out.
+- [ ] A test-mode submission attempted on an address a real entry already holds.
+      It must be refused with a message saying so, and that entrant's row must
+      keep `is_test = false`.
+- [ ] `/admin/preview` opened and アニメーションを再生 pressed, to confirm the
+      number-reveal animation renders on the operator's device.
 - [ ] A CSV exported and opened in Excel with Japanese names intact.
 - [ ] `info@chairman.jp` reaches a monitored mailbox.
 
