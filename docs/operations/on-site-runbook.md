@@ -50,12 +50,18 @@ IP**.
    them.
 3. Check **メール配信エラー** on 概要. A message there names the provider's reason.
 4. **送信待ちメール数** is briefly non-zero during normal traffic — every
-   confirmation queues a receipt that is sent immediately. A number that climbs
-   and does not fall means either the worker is not running (check the
-   repository's **Actions** tab for the `Email outbox retry worker` workflow,
-   and that `CRON_SECRET` matches between the GitHub Actions secret and the
-   Vercel environment variable) or it is at its cap of 20 messages per run,
-   which is the more likely cause after a provider incident.
+   confirmation queues a receipt that is sent immediately.
+
+   **A number that climbs and stays up is normal, and the fix is one click.**
+   The retry worker asks GitHub for a run every 5 minutes and does not get one:
+   measured, the real gap is a median of 88 minutes and can reach 3 hours.
+   Do not wait for it. Go to the repository's **Actions** tab → `Email outbox
+   retry worker` → **Run workflow**, and the queue drains in seconds. It moves
+   at most 20 messages per run, so press it again if the number is large.
+
+   If a manual run goes red, open it: the workflow prints its own reason.
+   Missing `APP_URL` / `CRON_SECRET` repository secrets, or a `CRON_SECRET` that
+   no longer matches the Vercel environment variable, is what it looks like.
 
 This gauge counts real entrants only. Your own test-mode rehearsals never appear
 in it, and neither do they appear in 確認済み応募数 or 確認待ち.
@@ -87,9 +93,17 @@ number.
   refuses confirmation as well as new entries. Use it only when entries are
   genuinely finished — the closing step in [After the event](#after-the-event)
   below. **If you press it by mistake, 受付を再開 is there on the closed
-  screen** and puts everything back; the schedule is untouched. Every press of
-  either is recorded against your account, so recovering from a slip is a
-  normal thing to do, not something to hide.
+  screen** and puts everything back. Every press of either is recorded against
+  your account, so recovering from a slip is a normal thing to do, not
+  something to hide.
+
+**受付を再開 is for the minute after a mis-tap, not for after the draw.** A
+verification link stays usable for 24 hours, and closing is the only thing
+stopping the people holding one from taking a number. Reopen once the CSV is
+exported and the draw is done, and any of them can still claim a number — one
+that is in no exported list and cannot win. That is why it is not the inviting
+button on the closed screen. If somebody genuinely needs to be let in after
+the draw, that is a decision to make deliberately, not a tap.
 
 Every one of these asks first, キャンセル is the default, and all four actions
 are recorded against your account.
@@ -107,16 +121,20 @@ An optional backstop exists if you want one — see
 [prelaunch-checklist.md](prelaunch-checklist.md) section 6 — but it is not in
 use for this event.
 
+After you close, anyone who opens a confirmation link they never used is told
+**Entries are closed**, on the link's own page. They are not sent back to the
+form to try again, because that would only meet the same wall one tap later.
+
 ### What the state line means
 
 | Shown | Meaning |
 | --- | --- |
-| 未開始 | `DRAFT`. Nothing has been started; the visitor's page says entries are not open yet. |
+| 未開始 | `DRAFT`. Nothing has been started; the visitor's page says entries are not open yet, and no number is issued. |
 | 開始待ち | Scheduled, but the opening time has not arrived. |
 | 受付中 | Open. Visitors can enter. |
 | 一時停止中 | You paused it. Reversible with 受付を再開. |
 | 受付終了（抽選時刻） | Still scheduled, but within 30 minutes of the draw, so intake closed automatically. |
-| 受付終了 | You closed it. 受付を再開 brings it back if that was a mistake. |
+| 受付終了 | You closed it. 受付を再開 brings it back if that was a mistake — read the warning above before using it after the draw. |
 
 ## Checking the flow mid-event, without affecting the draw
 

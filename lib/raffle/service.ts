@@ -252,8 +252,10 @@ export class RaffleService {
 
     // Recorded with the moment it was given, because proving consent is the
     // sender's job under CASL and "they ticked it at some point" is not proof.
-    // Withdrawn on a resubmission that leaves the box alone, so the stored
-    // answer is always the visitor's most recent one.
+    // A resubmission that leaves the box alone withdraws it — but only while
+    // the entry is still PENDING: a verified address returns above, untouched.
+    // Withdrawal after confirmation goes through the unsubscribe link in the
+    // mail itself, which is what CASL actually requires; this form is not it.
     const marketing = {
       marketing_consent: request.marketingConsent,
       marketing_consent_at: request.marketingConsent ? this.now().toISOString() : null,

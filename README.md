@@ -202,9 +202,12 @@ Auth's built-in sender (`noreply@mail.app.supabase.io`), which has its own
 limits: 30 emails an hour project-wide, raised from the default of 2, plus a
 60-second cooldown per address that cannot be configured.
 
-`.github/workflows/email-outbox.yml` calls the worker every 5 minutes — GitHub
-Actions' shortest supported interval, and independent of the Vercel plan tier,
-which matters because Vercel Cron on the Hobby plan runs at most once a day.
+`.github/workflows/email-outbox.yml` calls the worker on a `*/5` schedule —
+GitHub Actions' shortest supported interval, and independent of the Vercel plan
+tier, which matters because Vercel Cron on the Hobby plan runs at most once a
+day. **The schedule is a request, not a promise:** measured over 13 consecutive
+runs, the real gap was a median of 88 minutes (58–197). Treat the schedule as
+eventual and the Actions tab's "Run workflow" as the lever when it matters.
 The endpoint requires `Authorization: Bearer ${CRON_SECRET}` and compares the
 value in constant time. Set two GitHub Actions repository secrets before the
 first deploy — `APP_URL` (the production origin) and `CRON_SECRET` (matching

@@ -30,9 +30,11 @@ and never says who won.
 - QR target: `https://luckydraw.livapon.com/jfca-2026`. Campaign `jfca-2026`,
   Japan Festival Canada 2026, `America/Toronto`.
 - One case-insensitive address per campaign. Confirmation links expire in 24
-  hours; at most 3 sends per token in 24 hours, 2 minutes apart. Registration is
-  open only while `SCHEDULED`, after `opens_at`, and before
-  `draw_starts_at - 30 minutes`.
+  hours; at most 3 sends per token in 24 hours, 2 minutes apart.
+- **Intake is opened and closed by hand.** `opens_at` and `draw_starts_at` are
+  optional bounds and are both NULL in production, so `campaigns.status` alone
+  decides. With no draw time there is no automatic cut-off: closing before the
+  CSV is exported is what fixes the pool.
 
 ## Where things are
 
@@ -47,7 +49,7 @@ and never says who won.
 | `lib/admin/` | Dashboard queries, audit log, CSV |
 | `lib/security/` | Operator session, `@chairman.jp` check, Turnstile |
 | `lib/config/startup.ts` | Boot-time configuration guard, via `instrumentation.ts` |
-| `supabase/migrations/` | 0001–0007. The RPCs are where the concurrency safety lives |
+| `supabase/migrations/` | 0001–0009. The RPCs are where the concurrency safety lives |
 | `emails/` | React Email templates, English only |
 
 ## The parts that are easy to get wrong
@@ -66,9 +68,14 @@ breaks every receipt link already sitting in a visitor's inbox.
 
 **Mail is inline first, durable second.** The visitor at the booth gets their
 link immediately; if Resend refuses, the message is armed in `email_outbox` and
-the GitHub Actions worker retries every 5 minutes. A send allowance is spent per
-message, not per attempt, so a provider outage does not cost a visitor one of
-their three sends.
+the GitHub Actions worker retries it. A send allowance is spent per message,
+not per attempt, so a provider outage does not cost a visitor one of their
+three sends.
+
+That worker asks for a 5-minute schedule and does not get one — measured median
+88 minutes, up to 197. It is a backstop rather than the delivery path, and the
+visitor's own "Send it again" is the fast remedy; the manual `workflow_dispatch`
+is the operator's. Do not write a five-minute figure back into any document.
 
 **Test mode is verified server-side, twice.** `?test=1` only does anything for a
 signed-in operator, and `RaffleService` re-checks the operator session before
@@ -83,8 +90,17 @@ go through the real magic-link flow.
 **Confirmation dialogs are not applied uniformly, on purpose.** The entry form
 has one because it shows the typed address back, and a typo there is a real,
 common mistake with no other guard. The admin controls have them because
-pausing or closing changes what every visitor sees, and closing cannot be
-undone. The verify page deliberately has none: it exists to do one thing, is
+pausing or closing changes what every visitor sees. Closing is undoable —
+受付を再開 appears on the closed screen — but the dialog is what keeps it
+deliberate, and the reopen is written to the audit log.
+
+Reopening earns its own warning, and the reason is worth keeping. Closing was
+made undoable on the strength of `draw_starts_at`: a number could not be issued
+once the draw had begun, whatever the status said. The next change made the
+schedule optional and this event runs with no draw time at all, so that
+backstop is not there. `campaigns.status` is now the entire gate, which is why
+the reopen dialog says plainly what it does and why it is not the primary
+button on the closed screen. The verify page deliberately has none: it exists to do one thing, is
 reached by opening a link on purpose, states the consequence above the button,
 and the "irreversible" outcome is precisely the one the visitor came for — a
 dialog there only restated the page and put a tap between the visitor and their
@@ -125,8 +141,9 @@ with their audit rows; search, CSV export and the preview page.
 Five defects were found and fixed in `cf1c1d6` — that commit message describes
 each one and why it mattered.
 
-`pnpm test` is 186 cases across 23 files. `pnpm test:e2e` is 19 Playwright
-specs: 5 public journey, 6 admin, 8 read-only production smoke.
+`pnpm test` is 210 cases across 24 files. `pnpm test:e2e` is 20 Playwright
+specs: 5 public journey, 7 admin, and 8 read-only production smoke that only run
+when `SMOKE_BASE_URL` is set — so a local run reports 12.
 
 ## Open items
 
@@ -166,10 +183,21 @@ specs: 5 public journey, 6 admin, 8 read-only production smoke.
    a 500 for its full 24-hour lifetime instead of "link cannot be used". Not
    fixed: the fix is in SQL, and the race needs two requests for a brand-new
    address to interleave within milliseconds.
-8. **Profile fields on an unverified entry can be overwritten** by anyone
-   resubmitting that address. Bounded by the 5/day per-address limit, cannot
-   yield a number, and is inherent to an email-keyed form that stores the
-   profile before verification.
+8. **Anything on an unverified entry can be overwritten** by anyone
+   resubmitting that address — the profile fields, and since `0008` the
+   marketing consent with them. A third party who submits a stranger's address
+   with the optional box ticked leaves `marketing_consent = true` stamped with
+   their own submission time; the victim then confirms their own link and is
+   exported as a consented subscriber. Bounded by the 5/day per-address limit
+   and it cannot yield a number, but the consent timestamp is the one field
+   here that is meant to be evidence.
+
+   Not fixed, and the reason is that there is nothing to fix it with: before
+   verification nobody owns the row, both submissions carry the same live
+   token, and the person confirming cannot be told apart from the person who
+   typed the box. A real fix issues a fresh token whenever consent changes, so
+   the answer that gets confirmed is the one from the link that was clicked.
+   Worth doing before this code is reused for anything that mails a list.
 Resolved since: the visitor's form used to lead with seven expanded optional
 fields, putting the only required one 935px down an 812px viewport. The section
 is now a collapsed disclosure — still first, so the offer is made before the

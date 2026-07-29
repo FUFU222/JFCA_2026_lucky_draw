@@ -111,7 +111,14 @@ export default async function AdminDashboard() {
         </dl>
         <CampaignControls status={campaign.status} />
 
-        {campaign.opens_at === null && campaign.draw_starts_at === null && (
+        {/*
+          Gated on the draw time alone, not on both timestamps. 受付を開始 sets
+          `opens_at` to now, so gating on that as well made this note vanish the
+          moment it started mattering — visible only before the event, gone for
+          the whole of it. What it warns about is the absence of an automatic
+          cut-off, and that is what `draw_starts_at` being unset means.
+        */}
+        {campaign.draw_starts_at === null && (
           <p className="text-sm text-neutral-600">
             <strong className="font-semibold text-neutral-900">
               CSVを取る前に「受付を終了」。

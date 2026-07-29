@@ -32,7 +32,11 @@ async function createCampaign(overrides: Record<string, unknown> = {}) {
     .insert({
       slug: uniqueSlug(),
       title: 'Schema test',
-      status: 'DRAFT',
+      // Open, because nearly everything below is about token and receipt
+      // semantics and needs a campaign that will issue a number at all. This
+      // was DRAFT until DRAFT joined CLOSED in the confirmation gate; the
+      // cases that want a shut campaign now say so explicitly.
+      status: 'SCHEDULED',
       terms_version: 'test-v1',
       ...overrides,
     })

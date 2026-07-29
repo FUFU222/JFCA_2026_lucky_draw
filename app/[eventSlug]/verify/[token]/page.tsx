@@ -22,22 +22,44 @@ export default async function VerifyPage({
   // A GET only reads. The number is issued by the action on this page.
   const state = await verificationLinkState(eventSlug, token);
 
+  if (state === 'usable') {
+    return (
+      <PageShell>
+        <VerificationConfirmation eventSlug={eventSlug} token={token} />
+      </PageShell>
+    );
+  }
+
+  // Nothing is offered once the event is over, because there is nothing to
+  // offer. Sending this visitor back to the entry form would only walk them
+  // into "Entries are closed" — the same wall, one tap further on.
+  if (state === 'event_over') {
+    return (
+      <PageShell>
+        <section className="space-y-5">
+          <h1 className="text-2xl font-bold text-neutral-900">
+            {messages.schedule.closedHeading}
+          </h1>
+          <p className="text-[15px] leading-relaxed text-neutral-700">
+            {messages.schedule.closedBody}
+          </p>
+        </section>
+      </PageShell>
+    );
+  }
+
   return (
     <PageShell>
-      {state === 'usable' ? (
-        <VerificationConfirmation eventSlug={eventSlug} token={token} />
-      ) : (
-        <section className="space-y-5">
-          <h1 className="text-2xl font-bold text-neutral-900">{t.invalidHeading}</h1>
-          <p className="text-[15px] leading-relaxed text-neutral-700">{t.invalidBody}</p>
-          <Link
-            href={`/${eventSlug}`}
-            className="inline-flex min-h-12 items-center rounded-lg bg-neutral-900 px-5 text-base font-semibold text-white"
-          >
-            {t.invalidAction}
-          </Link>
-        </section>
-      )}
+      <section className="space-y-5">
+        <h1 className="text-2xl font-bold text-neutral-900">{t.invalidHeading}</h1>
+        <p className="text-[15px] leading-relaxed text-neutral-700">{t.invalidBody}</p>
+        <Link
+          href={`/${eventSlug}`}
+          className="inline-flex min-h-12 items-center rounded-lg bg-neutral-900 px-5 text-base font-semibold text-white"
+        >
+          {t.invalidAction}
+        </Link>
+      </section>
     </PageShell>
   );
 }

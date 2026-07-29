@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
+import { verificationLinkState } from '../../lib/db/public-queries';
 import { SupabaseOutboxRepository, SupabaseRaffleRepository } from '../../lib/db/server';
 import { EmailOutboxProcessor } from '../../lib/email/outbox';
 import { SupabaseRateLimiter } from '../../lib/raffle/rate-limit';
@@ -475,6 +476,71 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
         token: mailer.verification[0].token,
       }),
     ).resolves.toBeNull();
+  });
+
+  it('refuses to issue a number while the campaign is DRAFT, but still lets a rehearsal through', async () => {
+    const campaign = await createOpenCampaign();
+    const mailer = new FakeMailer();
+    const service = buildService(mailer, async () => true);
+
+    await service.requestVerification({
+      eventSlug: campaign.slug,
+      email: `draft-real-${uniqueSuffix()}@example.com`,
+      termsConsent: true,
+      turnstileToken: 'captcha',
+    });
+    await service.requestVerification({
+      eventSlug: campaign.slug,
+      email: `draft-test-${uniqueSuffix()}@example.com`,
+      termsConsent: true,
+      turnstileToken: 'captcha',
+      isTest: true,
+    });
+    const [realLink, testLink] = mailer.verification;
+
+    // The status somebody reaches for in the table editor to stop everything.
+    // The visitor's page already reads "Entries are not open yet" for it, so a
+    // number issued underneath that is a number nobody can account for.
+    await supabase.from('campaigns').update({ status: 'DRAFT' }).eq('id', campaign.id);
+
+    await expect(
+      service.confirmVerification({ eventSlug: campaign.slug, token: realLink.token }),
+    ).resolves.toBeNull();
+    await expect(
+      service.confirmVerification({ eventSlug: campaign.slug, token: testLink.token }),
+    ).resolves.toMatchObject({ number: BigInt(900_000_001) });
+  });
+
+  it('tells a link holder the event is over rather than that their link expired', async () => {
+    const campaign = await createOpenCampaign();
+    const mailer = new FakeMailer();
+    const service = buildService(mailer, async () => true);
+
+    await service.requestVerification({
+      eventSlug: campaign.slug,
+      email: `over-real-${uniqueSuffix()}@example.com`,
+      termsConsent: true,
+      turnstileToken: 'captcha',
+    });
+    await service.requestVerification({
+      eventSlug: campaign.slug,
+      email: `over-test-${uniqueSuffix()}@example.com`,
+      termsConsent: true,
+      turnstileToken: 'captcha',
+      isTest: true,
+    });
+    const [realLink, testLink] = mailer.verification;
+
+    await expect(verificationLinkState(campaign.slug, realLink.token)).resolves.toBe('usable');
+
+    await supabase.from('campaigns').update({ status: 'CLOSED' }).eq('id', campaign.id);
+
+    // Still a perfectly good link. What changed is the event, and that is what
+    // the page has to say — "enter again to get a new link" walks the holder
+    // into "Entries are closed" one tap later.
+    await expect(verificationLinkState(campaign.slug, realLink.token)).resolves.toBe('event_over');
+    // A rehearsal after closing is exactly what test mode is for.
+    await expect(verificationLinkState(campaign.slug, testLink.token)).resolves.toBe('usable');
   });
 
   it('answers a stale link from an earlier cycle as unusable, not as a server fault', async () => {
