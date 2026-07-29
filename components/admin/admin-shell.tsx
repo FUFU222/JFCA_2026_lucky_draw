@@ -37,6 +37,12 @@ export function AdminShell({
             >
               応募一覧
             </Link>
+            <Link
+              href="/admin/preview"
+              className="font-medium text-neutral-700 underline-offset-2 hover:underline"
+            >
+              プレビュー
+            </Link>
           </nav>
           <span className="text-neutral-500">{operatorEmail}</span>
         </div>
