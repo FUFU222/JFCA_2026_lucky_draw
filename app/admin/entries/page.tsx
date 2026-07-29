@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { AdminShell } from '../../../components/admin/admin-shell';
 import { ExportButton } from '../../../components/admin/export-button';
 import { ACTIVE_CAMPAIGN_SLUG } from '../../../lib/campaign/config';
+import { formatDateTime } from '../../../lib/admin/format';
 import { loadDashboard, searchEntries } from '../../../lib/admin/queries';
 import { requireOperatorSession } from '../../../lib/security/operator-session';
 
@@ -89,7 +90,7 @@ export default async function AdminEntriesPage({
               <td className="py-2 pr-4 text-neutral-600">
                 {ENTRY_STATE_LABEL[entry.state] ?? entry.state}
               </td>
-              <td className="py-2 font-mono text-xs text-neutral-500">{entry.created_at}</td>
+              <td className="py-2 text-xs text-neutral-500">{formatDateTime(entry.created_at)}</td>
             </tr>
           ))}
         </tbody>

@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { AdminShell, StatCard } from '../../components/admin/admin-shell';
 import { CampaignControls } from '../../components/admin/campaign-controls';
 import { ACTIVE_CAMPAIGN_SLUG, registrationPhase } from '../../lib/campaign/config';
+import { formatDateTime } from '../../lib/admin/format';
 import { loadDashboard } from '../../lib/admin/queries';
 import { requireOperatorSession } from '../../lib/security/operator-session';
 
@@ -39,19 +40,22 @@ export default async function AdminDashboard() {
       <section className="mt-10 space-y-4">
         <h2 className="text-lg font-bold text-neutral-900">受付状況</h2>
         <dl className="grid gap-2 text-[15px] sm:grid-cols-2">
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
             <dt className="text-neutral-600">状態</dt>
-            <dd className="font-semibold text-neutral-900">
-              {PHASE_LABEL[registrationPhase(campaign)]}（{campaign.status}）
+            <dd className="flex items-center gap-2 font-semibold text-neutral-900">
+              {PHASE_LABEL[registrationPhase(campaign)]}
+              <span className="rounded-full bg-neutral-100 px-2 py-0.5 font-mono text-xs font-medium text-neutral-500">
+                {campaign.status}
+              </span>
             </dd>
           </div>
           <div className="flex gap-2">
             <dt className="text-neutral-600">開始日時</dt>
-            <dd className="font-mono text-neutral-900">{campaign.opens_at ?? '未設定'}</dd>
+            <dd className="text-neutral-900">{formatDateTime(campaign.opens_at)}</dd>
           </div>
           <div className="flex gap-2">
             <dt className="text-neutral-600">抽選開始日時</dt>
-            <dd className="font-mono text-neutral-900">{campaign.draw_starts_at ?? '未設定'}</dd>
+            <dd className="text-neutral-900">{formatDateTime(campaign.draw_starts_at)}</dd>
           </div>
           <div className="flex gap-2">
             <dt className="text-neutral-600">規約バージョン</dt>
@@ -91,8 +95,8 @@ export default async function AdminDashboard() {
                     テスト
                   </span>
                 )}
-                <span className="ml-auto font-mono text-xs text-neutral-500">
-                  {entry.created_at}
+                <span className="ml-auto text-xs text-neutral-500">
+                  {formatDateTime(entry.created_at)}
                 </span>
               </li>
             ))}
@@ -112,7 +116,7 @@ export default async function AdminDashboard() {
                   {failure.email} <span className="text-neutral-500">({failure.kind})</span>
                 </p>
                 <p className="mt-1 text-sm text-[#c8102e]">{failure.error ?? '不明なエラー'}</p>
-                <p className="mt-1 font-mono text-xs text-neutral-500">{failure.attemptedAt}</p>
+                <p className="mt-1 text-xs text-neutral-500">{formatDateTime(failure.attemptedAt)}</p>
               </li>
             ))}
           </ul>
