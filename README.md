@@ -83,7 +83,7 @@ values (
   null,
   'DRAFT',
   10000,
-  'jfca-2026-terms-v1-placeholder'
+  'jfca-2026-terms-v1'
 )
 on conflict (slug) do nothing;
 ```

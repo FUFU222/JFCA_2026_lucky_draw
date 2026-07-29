@@ -130,28 +130,22 @@ specs: 5 public journey, 6 admin, 8 read-only production smoke.
 
 ## Open items
 
-1. **Marketing consent is bundled into the required agreement — a team
-   decision, deliberately not made by one person.** Raised with the team on
-   2026-07-29; **blocks launch.**
+1. **`terms_version` must never be edited in place once real entries exist.**
+   Settled 2026-07-29 at `jfca-2026-terms-v1`, with the marketing consent split
+   into its own optional checkbox and the wording finalised — see the commits
+   from that date. What remains is a rule rather than a task.
 
-   The entry form has one required checkbox, and the terms behind it say the
-   address is also used for LIVAPON news. Entry is therefore conditional on
-   accepting marketing. The event is in Toronto, so Canada's anti-spam law
-   (CASL) is the regime that applies, and bundling marketing consent into a
-   condition of entry is the pattern that attracts attention there. Nobody on
-   this project is a lawyer; the point is that the choice has a real trade-off
-   and should be owned by more than one person.
+   A stored consent points at the wording that was on screen when it was given.
+   Editing the campaign row's `terms_version` afterwards relabels consents that
+   were collected against different text — it claims people agreed to something
+   they never saw, which is worse than having no version at all. Changed
+   wording means a new version, applied to a campaign with no entries or to the
+   next event.
 
-   - **Keep bundled** — the mailing list is effectively every entrant. No work.
-   - **Split it out** — an optional second checkbox, entry unaffected. Needs a
-     `marketing_consent` column, the form field, the CSV column, and the
-     marketing sentence removed from the required terms. Roughly an hour.
-
-   Whatever is decided, `lib/campaign/legal.ts` still carries placeholder
-   wording under `jfca-2026-terms-v1-placeholder`, and the production campaign
-   row still has that version. Bump the constant and the campaign's
-   `terms_version` **in the same change**, so a recorded consent always points
-   at the text that was actually shown.
+   The constant in `lib/campaign/legal.ts` describes the wording *in that file*
+   and is not what gets stored; the campaign row is. Nothing keeps them
+   agreeing, so the admin dashboard compares the two and flags a drift rather
+   than letting it be discovered from a consent record nobody can reproduce.
 2. **A resend after the link expired sends nothing** and the acknowledgement
    page does not say "submit the form again". The service behaviour is
    intentional; the wording gap is real. The *verify* page was fixed; only the

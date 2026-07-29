@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { AdminShell, StatCard } from '../../components/admin/admin-shell';
 import { CampaignControls } from '../../components/admin/campaign-controls';
 import { ACTIVE_CAMPAIGN_SLUG, registrationPhase } from '../../lib/campaign/config';
+import { LUCKY_DRAW_TERMS_VERSION } from '../../lib/campaign/legal';
 import { formatDateTime } from '../../lib/admin/format';
 import { loadDashboard } from '../../lib/admin/queries';
 import { requireOperatorSession } from '../../lib/security/operator-session';
@@ -88,9 +89,24 @@ export default async function AdminDashboard() {
               </dd>
             </div>
           )}
-          <div className="flex gap-2">
-            <dt className="text-neutral-600">規約バージョン</dt>
+          {/*
+            The version stored against every consent comes from the campaign
+            row; the wording a visitor is shown comes from the code. Nothing
+            makes those agree, so a drift is flagged here rather than
+            discovered later from a consent record pointing at text nobody
+            can produce.
+          */}
+          <div className="flex flex-wrap gap-x-2 gap-y-1">
+            {/* Never wrapped mid-label: the badge below can be long, and a flex
+                row will happily break 規約バージョン in half to make room. */}
+            <dt className="shrink-0 text-neutral-600">規約バージョン</dt>
             <dd className="font-mono text-neutral-900">{campaign.terms_version}</dd>
+            {campaign.terms_version !== LUCKY_DRAW_TERMS_VERSION && (
+              <dd className="basis-full text-xs font-semibold text-[var(--brand-accent)]">
+                表示中の規約は <span className="font-mono">{LUCKY_DRAW_TERMS_VERSION}</span>{' '}
+                — 保存される同意が、見せている文面と食い違っています
+              </dd>
+            )}
           </div>
         </dl>
         <CampaignControls status={campaign.status} />

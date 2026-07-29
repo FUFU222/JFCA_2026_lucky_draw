@@ -125,18 +125,20 @@ step in [on-site-runbook.md](on-site-runbook.md). Cancel by **2026-08-31**.
 
 ## 5. Legal and content
 
-- [ ] **Decide whether marketing consent stays bundled into the required
-      agreement.** Entry currently requires one checkbox, and the terms behind
-      it also cover LIVAPON news — so entering means accepting marketing. The
-      event is in Toronto, so CASL applies. Splitting it into a second,
-      optional checkbox is about an hour of work and has to happen before
-      launch if it is going to happen at all. A team decision, not one
-      person's.
-- [ ] Final Lucky Draw terms wording approved.
-- [ ] Wording placed in `lib/campaign/legal.ts`, and `LUCKY_DRAW_TERMS_VERSION`
-      bumped from `jfca-2026-terms-v1-placeholder` in the **same** change as the
-      campaign's `terms_version`, so a stored consent always points at the text
-      that was shown.
+- [x] **Marketing consent split out of the required agreement.** Done
+      2026-07-29. Entering needs one checkbox covering the entry only; LIVAPON
+      news is a second, optional, unticked box that does not gate entry, with
+      the moment of consent stored alongside it. The event is in Toronto and
+      CASL wants consent to commercial email to be its own affirmative act.
+- [x] **Terms wording and version fixed at `jfca-2026-terms-v1`.** Done
+      2026-07-29, in `lib/campaign/legal.ts`, `supabase/seed.sql` and the
+      production campaign row together.
+- [ ] **Never edit `terms_version` in place once real entries exist.** A stored
+      consent points at the wording that was on screen when it was given;
+      relabelling it retroactively claims someone agreed to text they never
+      saw. Changed wording means a new version, on a campaign with no entries
+      or on the next event. The dashboard flags it when the campaign row and
+      the code disagree.
 - [ ] Every visitor-facing string read by a native English speaker. The public
       side is **English only** — the Japanese copy and the language switcher
       were removed, and `raffle_entries.locale` is constrained to `'en'`.

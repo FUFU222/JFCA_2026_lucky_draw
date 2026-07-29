@@ -2,15 +2,15 @@ export const PRIVACY_POLICY_URL = 'https://livapon.com/policies/privacy-policy';
 export const SUPPORT_EMAIL = 'info@chairman.jp';
 
 /**
- * The version recorded against every entry's consent. It matches the value the
- * seed writes to `campaigns.terms_version`.
+ * The version of the wording *in this file*.
  *
- * The clauses below are the ones the service design states. The wording still
- * needs legal sign-off before public registration opens; when the final text
- * lands, bump this version and `supabase/seed.sql` together so an entry's
- * consent always points at the text that was shown.
+ * What actually gets recorded against an entry is `campaigns.terms_version`
+ * from the database — this constant is not read on that path. The two are
+ * meant to agree, and nothing but care keeps them agreeing, so the admin
+ * dashboard compares them and says so when they drift. Change this in the same
+ * commit as the text below, and update the campaign row to match.
  */
-export const LUCKY_DRAW_TERMS_VERSION = 'jfca-2026-terms-v1-placeholder';
+export const LUCKY_DRAW_TERMS_VERSION = 'jfca-2026-terms-v1';
 
 export interface TermsSection {
   heading: string;
