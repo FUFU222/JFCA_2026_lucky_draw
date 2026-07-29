@@ -253,10 +253,13 @@ advances the sequence, so the first real visitor would not be 10000.
 - [ ] Operator sign-in with a `@chairman.jp` address, and an address outside the
       domain refused.
 - [ ] 今すぐ受付を開始, 受付を一時停止, 受付を再開 and 受付を終了 each exercised,
-      and all four seen in the audit log. 受付を終了 is one-way from the
-      dashboard, so exercise it last, on a throwaway campaign or right at the
-      true end of this checklist. Check the state line reads 一時停止中 while
-      paused, not 受付終了.
+      and all four seen in the audit log. Check the state line reads 一時停止中
+      while paused, not 受付終了.
+- [ ] **受付を終了 pressed, then 受付を再開 from the closed screen**, and the
+      campaign comes back. Closing is recoverable on purpose: those two buttons
+      sit next to each other, and a stray tap at a busy booth must not end the
+      event with no way back short of database access. Confirm the recovery
+      shows in the audit log with `previous_status: CLOSED`.
 - [ ] Test mode walked end to end: follow **テストモードで開く** from the
       dashboard, submit and confirm an entry, and confirm the number lands at
       900000001+ and never appears in the 確認済み応募数 / 確認待ち counts or the

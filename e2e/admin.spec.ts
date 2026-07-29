@@ -127,6 +127,38 @@ test('pausing and resuming needs a confirmation and is recorded', async ({ page 
   await expect(page.getByText('SCHEDULED')).toBeVisible();
 });
 
+test('a campaign closed by mistake can be reopened from the dashboard', async ({ page }) => {
+  await supabase
+    .from('campaigns')
+    .update({
+      status: 'SCHEDULED',
+      opens_at: new Date(Date.now() - 60_000).toISOString(),
+      draw_starts_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
+    })
+    .eq('slug', 'jfca-2026');
+
+  await signIn(page, operatorAddress('ops.reopen'));
+
+  await page.getByRole('button', { name: '受付を終了' }).first().click();
+  await page.getByRole('dialog').getByRole('button', { name: '受付を終了' }).click();
+  await expect(page.getByText('CLOSED')).toBeVisible();
+
+  // 受付を終了 sits next to 受付を一時停止, so a stray tap at a busy booth must
+  // not end the event with no way back short of database access.
+  await page.getByRole('button', { name: '受付を再開' }).first().click();
+  await page.getByRole('dialog').getByRole('button', { name: '受付を再開' }).click();
+  await expect(page.getByText('SCHEDULED')).toBeVisible();
+
+  // Recoverable, but never quiet.
+  const { data: reopened } = await supabase
+    .from('admin_audit_logs')
+    .select('action, metadata')
+    .eq('action', 'RESUME_REGISTRATION')
+    .order('created_at', { ascending: false })
+    .limit(1);
+  expect(reopened?.[0]?.metadata).toMatchObject({ previous_status: 'CLOSED' });
+});
+
 test('the export asks first and records who asked', async ({ page }) => {
   const operator = operatorAddress('ops.export');
   await signIn(page, operator);

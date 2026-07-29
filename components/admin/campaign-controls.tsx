@@ -17,8 +17,15 @@ interface ActionSpec {
 
 /**
  * What can be done depends only on the current status: nothing is "pause"
- * from `DRAFT`, and nothing is offered at all once `CLOSED` — that state is
- * terminal by design (`docs/operations/on-site-runbook.md`).
+ * from `DRAFT`, and `CLOSED` offers only the way back.
+ *
+ * 受付を終了 sits next to 受付を一時停止, and it used to be terminal on this
+ * screen — a mis-tap at a busy booth ended the event with no recovery short of
+ * someone with database access. The one-way rule was also buying less than it
+ * looked: `draw_starts_at` already refuses to issue a number once the draw has
+ * begun, so reopening afterwards cannot put anybody into the draw. Losing an
+ * event to a stray tap is the worse risk, so closing is now undoable, and the
+ * dialog is what makes it deliberate.
  */
 function actionsFor(status: string): ActionSpec[] {
   switch (status) {
@@ -47,7 +54,7 @@ function actionsFor(status: string): ActionSpec[] {
           label: '受付を終了',
           dialogTitle: '受付を終了しますか？',
           dialogBody:
-            '一時停止と異なり、この画面から元に戻すことはできません。以後、応募・確認ともに受け付けなくなります。すでに発行された番号への影響はありません。',
+            'イベントの終了に使います。以後、応募も確認も受け付けなくなります。すでに発行された番号への影響はありません。誤って押した場合は再開できますが、操作は記録されます。',
           variant: 'secondary',
         },
       ];
@@ -65,8 +72,19 @@ function actionsFor(status: string): ActionSpec[] {
           label: '受付を終了',
           dialogTitle: '受付を終了しますか？',
           dialogBody:
-            '一時停止と異なり、この画面から元に戻すことはできません。以後、応募・確認ともに受け付けなくなります。すでに発行された番号への影響はありません。',
+            'イベントの終了に使います。以後、応募も確認も受け付けなくなります。すでに発行された番号への影響はありません。誤って押した場合は再開できますが、操作は記録されます。',
           variant: 'secondary',
+        },
+      ];
+    case 'CLOSED':
+      return [
+        {
+          action: 'RESUME',
+          label: '受付を再開',
+          dialogTitle: '終了した受付を再開しますか？',
+          dialogBody:
+            '開始日時と抽選日時はそのままで、受付だけを再び開きます。抽選開始の30分前を過ぎている場合は、再開しても受付は開かないままです。',
+          variant: 'primary',
         },
       ];
     default:
@@ -117,12 +135,14 @@ export function CampaignControls({
     }
   }
 
-  if (status === 'CLOSED') {
-    return <p className="text-[15px] text-neutral-600">このイベントの受付は終了しました。</p>;
-  }
-
   return (
     <div className="space-y-3">
+      {status === 'CLOSED' && (
+        <p className="text-[15px] text-neutral-600">
+          このイベントの受付は終了しています。誤って終了した場合は再開できます。
+        </p>
+      )}
+
       <div className="flex flex-wrap gap-3">
         {actions.map((spec) => (
           <button

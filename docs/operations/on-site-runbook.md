@@ -86,10 +86,13 @@ number.
   deliberate: they entered while it was open. **受付を再開** undoes it, and
   visitors can enter again immediately. While paused the state line reads
   **一時停止中**, not 受付終了 — the event has not ended.
-- **受付を終了** is different from pausing: it is the end of the event, refuses
-  confirmation as well as new entries, and cannot be undone from the dashboard.
-  Use it only when entries are genuinely finished — the closing step in
-  [After the event](#after-the-event) below.
+- **受付を終了** is different from pausing: it is the end of the event, and
+  refuses confirmation as well as new entries. Use it only when entries are
+  genuinely finished — the closing step in [After the event](#after-the-event)
+  below. **If you press it by mistake, 受付を再開 is there on the closed
+  screen** and puts everything back; the schedule is untouched. Every press of
+  either is recorded against your account, so recovering from a slip is a
+  normal thing to do, not something to hide.
 
 Every one of these asks first, キャンセル is the default, and all four actions
 are recorded against your account.
@@ -108,7 +111,7 @@ schedule.
 | 受付中 | Open. Visitors can enter. |
 | 一時停止中 | You paused it. Reversible with 受付を再開. |
 | 受付終了（抽選時刻） | Still scheduled, but within 30 minutes of the draw, so intake closed automatically. |
-| 受付終了 | You closed it. Not reversible from here. |
+| 受付終了 | You closed it. 受付を再開 brings it back if that was a mistake. |
 
 ## Checking the flow mid-event, without affecting the draw
 
