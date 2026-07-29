@@ -42,13 +42,10 @@ export async function POST(request: Request) {
   const dashboard = await loadDashboard(eventSlug);
   if (!dashboard) return NextResponse.json({ error: 'not_found' }, { status: 404 });
 
-  // Starting without a draw time would silently do nothing: `isRegistrationOpen()`
-  // requires `draw_starts_at` regardless of `status`, so the operator would see
-  // "started" here and "not open yet" on the public page with no way to tell why.
-  if (action === 'START' && dashboard.campaign.draw_starts_at === null) {
-    return NextResponse.json({ error: 'draw_time_not_set' }, { status: 409 });
-  }
-
+  // No draw time is needed to start. It used to be required, because intake
+  // could not open without one and pressing start would have silently done
+  // nothing; the timestamps are optional bounds now, so a campaign with neither
+  // opens the moment an operator says so.
   let status: 'PAUSED' | 'CLOSED' | 'SCHEDULED';
   if (action === 'PAUSE') {
     status = 'PAUSED';

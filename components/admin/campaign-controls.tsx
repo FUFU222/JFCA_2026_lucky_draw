@@ -92,13 +92,7 @@ function actionsFor(status: string): ActionSpec[] {
   }
 }
 
-export function CampaignControls({
-  status,
-  drawStartsAt,
-}: {
-  status: string;
-  drawStartsAt: string | null;
-}) {
+export function CampaignControls({ status }: { status: string }) {
   const router = useRouter();
   const [pendingAction, setPendingAction] = useState<ActionSpec | null>(null);
   const [sending, setSending] = useState(false);
@@ -112,7 +106,6 @@ export function CampaignControls({
   const [error, setError] = useState<string | null>(null);
 
   const actions = actionsFor(status);
-  const startBlocked = status === 'DRAFT' && drawStartsAt === null;
 
   async function apply(action: Action) {
     setSending(true);
@@ -151,7 +144,7 @@ export function CampaignControls({
             // Also closed while a change is being applied: until the refreshed
             // dashboard arrives these buttons describe the campaign as it was,
             // and a second press would act on figures that are already stale.
-            disabled={busy || (spec.action === 'START' && startBlocked)}
+            disabled={busy}
             onClick={() => setPendingAction(spec)}
             className={
               spec.variant === 'primary'
@@ -164,11 +157,6 @@ export function CampaignControls({
         ))}
       </div>
 
-      {startBlocked && (
-        <p className="text-sm text-neutral-600">
-          先に抽選日時を設定してください（事前準備チェックリストのイベントスケジュールの手順を参照）。設定しないと受付を開始できません。
-        </p>
-      )}
 
       {error && (
         <p role="alert" className="text-sm font-medium text-[#c8102e]">

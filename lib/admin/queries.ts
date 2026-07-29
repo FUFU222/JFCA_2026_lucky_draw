@@ -214,9 +214,9 @@ export async function setCampaignStatus(
  * immediately by setting `status` to `SCHEDULED` and, only if `opens_at` is
  * unset or still in the future, bringing it forward to now — an `opens_at`
  * already in the past is left untouched so restarting after a pause does not
- * quietly rewrite when the campaign "really" opened. The caller is
- * responsible for confirming `draw_starts_at` is already set: without it,
- * `isRegistrationOpen()` stays false no matter what this does.
+ * quietly rewrite when the campaign "really" opened. No draw time is needed:
+ * both timestamps are optional bounds, so a campaign with neither opens on
+ * this action alone.
  */
 export async function startRegistrationNow(
   campaignId: string,

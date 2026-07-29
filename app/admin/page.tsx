@@ -68,20 +68,42 @@ export default async function AdminDashboard() {
               </span>
             </dd>
           </div>
-          <div className="flex gap-2">
-            <dt className="text-neutral-600">開始日時</dt>
-            <dd className="text-neutral-900">{formatDateTime(campaign.opens_at)}</dd>
-          </div>
-          <div className="flex gap-2">
-            <dt className="text-neutral-600">抽選開始日時</dt>
-            <dd className="text-neutral-900">{formatDateTime(campaign.draw_starts_at)}</dd>
-          </div>
+          {/*
+            Shown only when armed. A row reading 未設定 on the screen an
+            operator watches during the event reads as something forgotten,
+            when running with no schedule at all is the intended way to use
+            this — the line below says so instead.
+          */}
+          {campaign.opens_at !== null && (
+            <div className="flex gap-2">
+              <dt className="text-neutral-600">開始日時</dt>
+              <dd className="text-neutral-900">{formatDateTime(campaign.opens_at)}</dd>
+            </div>
+          )}
+          {campaign.draw_starts_at !== null && (
+            <div className="flex gap-2">
+              <dt className="text-neutral-600">自動締切</dt>
+              <dd className="text-neutral-900">
+                {formatDateTime(campaign.draw_starts_at)} の30分前
+              </dd>
+            </div>
+          )}
           <div className="flex gap-2">
             <dt className="text-neutral-600">規約バージョン</dt>
             <dd className="font-mono text-neutral-900">{campaign.terms_version}</dd>
           </div>
         </dl>
-        <CampaignControls status={campaign.status} drawStartsAt={campaign.draw_starts_at} />
+        <CampaignControls status={campaign.status} />
+
+        {campaign.opens_at === null && campaign.draw_starts_at === null && (
+          <p className="text-sm text-neutral-600">
+            日程は設定されていません。受付の開閉はこのボタン操作だけで決まります。
+            <strong className="font-semibold text-neutral-900">
+              抽選用のCSVを取得する前に、必ず「受付を終了」してください。
+            </strong>
+            確認リンクは24時間有効なので、終了するまでは未確認の人が後から番号を取得できます。
+          </p>
+        )}
         <p className="text-sm text-neutral-600">
           <Link
             href={`/${campaign.slug}?test=1`}

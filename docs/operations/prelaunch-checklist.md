@@ -138,28 +138,44 @@ step in [on-site-runbook.md](on-site-runbook.md). Cancel by **2026-08-31**.
 
 ## 6. Event schedule
 
-Set from SQL, **not** the table editor: a bare timestamp typed there is read as
-UTC, which would open registration at 06:00 and close it at 12:30 local — in the
-middle of the event. Always write the offset explicitly. No deploy is needed and
-there is no prize data in the application at all.
+**This event is run by hand, with no schedule set.** Staff are at the booth, so
+the dashboard buttons decide everything and there is no SQL to write and no
+timezone to get wrong. Leave `opens_at` and `draw_starts_at` unset.
+
+- `DRAFT` — the page says entries are not open yet. This is the safe default.
+- `SCHEDULED` — intake is on. 今すぐ受付を開始 puts it here.
+- `PAUSED` — an operator stopped intake. Visitors who already hold a link can
+  still confirm and get their number, which is deliberate: they entered while
+  it was open.
+- `CLOSED` — finished. Confirmation is refused as well as entry, and it is the
+  only status that stops a number being issued. Recoverable with 受付を再開 if
+  pressed by mistake.
+
+> **The one thing manual operation costs you.** With no `draw_starts_at`, there
+> is no automatic backstop: a verification link stays usable for 24 hours, so
+> somebody who entered but never confirmed could still claim a number *after
+> the draw* unless intake is closed. **受付を終了 before the draw is not
+> optional** — it is the step that ends the pool. See the on-site runbook.
+
+### If you would rather have a backstop
+
+Both timestamps are optional bounds and can be set independently. Set from SQL,
+**not** the table editor: a bare timestamp typed there is read as UTC, which
+would open registration at 06:00 and close it at 12:30 local — in the middle of
+the event. Always write the offset explicitly.
 
 ```sql
 update public.campaigns
-set opens_at       = '2026-08-15 10:00:00-04',  -- Toronto local, as an instant
-    draw_starts_at = '2026-08-15 17:00:00-04',
-    status         = 'SCHEDULED'
+set draw_starts_at = '2026-08-15 17:00:00-04'  -- Toronto local, as an instant
 where slug = 'jfca-2026';
 ```
 
-- `DRAFT` — the page says entries are not open yet. This is the safe default.
-- `SCHEDULED` — entries open at `opens_at` and close automatically **30 minutes
-  before** `draw_starts_at`. Nothing else needs doing on the day.
-- `PAUSED` — an operator stopped intake from the dashboard. Visitors who already
-  hold a link can still confirm and get their number.
-- `CLOSED` — finished. Confirmation is refused as well as entry.
+With that set, intake stops on its own **30 minutes before** the draw, and a
+number can never be issued past it even if nobody presses anything. `opens_at`
+works the same way in the other direction: intake will not start before it,
+whatever the status says.
 
-Confirmation is also refused once `draw_starts_at` passes, so a number can never
-be issued after the draw has begun. Test-mode entries are the one exception —
+Test-mode entries are the one exception —
 they are exempt from both the schedule and this cut-off on purpose, so a
 rehearsal works before opening and after closing.
 

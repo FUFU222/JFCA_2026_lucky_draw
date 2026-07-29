@@ -76,11 +76,8 @@ number.
 
 概要 shows only the buttons that make sense for the current state:
 
-- **今すぐ受付を開始** appears while the campaign is `DRAFT`. It is greyed out
-  with an explanation if the draw time has not been set yet (see
-  [prelaunch-checklist.md](prelaunch-checklist.md) section 6) — without one,
-  starting would silently do nothing. Pressing it also stamps the opening time
-  as now.
+- **今すぐ受付を開始** appears while the campaign is `DRAFT`, and opens intake
+  the moment you press it. Nothing has to be set up first.
 - **受付を一時停止** stops new entries immediately but does **not** stop someone
   who already holds a link from confirming and getting their number, which is
   deliberate: they entered while it was open. **受付を再開** undoes it, and
@@ -97,10 +94,18 @@ number.
 Every one of these asks first, キャンセル is the default, and all four actions
 are recorded against your account.
 
-The **draw time** (`draw_starts_at`) is still set from SQL only, never from this
-dashboard — see [prelaunch-checklist.md](prelaunch-checklist.md) section 6. The
-buttons above are for changing your mind on the day, not for the original
-schedule.
+**This event has no schedule set — these buttons are the whole mechanism.**
+Nothing opens or closes on its own, which means one rule matters more than any
+other:
+
+> **受付を終了 before you export the CSV for the draw.** A verification link
+> stays usable for 24 hours, so somebody who entered but never confirmed can
+> still claim a number until intake is closed. Close first, then export, and
+> the pool is fixed. Export first and somebody can still join it afterwards.
+
+An optional backstop exists if you want one — see
+[prelaunch-checklist.md](prelaunch-checklist.md) section 6 — but it is not in
+use for this event.
 
 ### What the state line means
 
