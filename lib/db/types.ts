@@ -42,6 +42,8 @@ export interface RaffleEntry {
   locale: EntryLocale;
   terms_version: string;
   terms_consented_at: string;
+  marketing_consent: boolean;
+  marketing_consent_at: string | null;
   state: EntryState;
   number: number | null;
   verified_at: string | null;

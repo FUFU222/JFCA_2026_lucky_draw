@@ -19,6 +19,7 @@ type Draft = {
   region: string;
   email: string;
   consent: boolean;
+  marketing: boolean;
 };
 
 const EMPTY_DRAFT: Draft = {
@@ -31,6 +32,7 @@ const EMPTY_DRAFT: Draft = {
   region: '',
   email: '',
   consent: false,
+  marketing: false,
 };
 
 /** The optional half of the form, the part that starts collapsed. */
@@ -177,6 +179,7 @@ export function RaffleForm({
     const accepted = await post(`/api/campaigns/${eventSlug}/entries`, {
       email: draft.email.trim(),
       terms_consent: true,
+      marketing_consent: draft.marketing,
       first_name: draft.firstName,
       last_name: draft.lastName,
       phone: draft.phone,
@@ -454,6 +457,25 @@ export function RaffleForm({
               termsLabel={t.consentTerms}
               termsHref={`/${eventSlug}/terms`}
             />
+          </span>
+        </label>
+
+        {/*
+          Separate from the box above, and never a condition of entering. The
+          event is in Canada, where consent to commercial email has to be its
+          own affirmative act rather than something bundled into the thing the
+          visitor actually came for. It is not part of `canSend`.
+        */}
+        <label className="flex cursor-pointer items-start gap-3 text-[15px] leading-relaxed text-neutral-800">
+          <input
+            type="checkbox"
+            className="mt-1 size-6 shrink-0"
+            checked={draft.marketing}
+            onChange={(event) => set('marketing', event.target.checked)}
+          />
+          <span>
+            {t.marketing}
+            <span className="mt-0.5 block text-sm text-neutral-500">{t.marketingOptional}</span>
           </span>
         </label>
 

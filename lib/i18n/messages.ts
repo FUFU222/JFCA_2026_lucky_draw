@@ -28,6 +28,12 @@ export const messages = {
     consent: 'I agree to the Privacy Policy and the Terms',
     consentPrivacy: 'Privacy Policy',
     consentTerms: 'Terms',
+    // A second, optional box. Entering the draw must not be conditional on
+    // accepting marketing — the event is in Canada, where consent to
+    // commercial email has to be its own affirmative act. Unticked is the
+    // default a visitor gets by doing nothing.
+    marketing: 'Also send me LIVAPON news and offers by email. You can unsubscribe at any time.',
+    marketingOptional: 'Optional — you get your number either way',
     submit: 'Send confirmation email',
     submitting: 'Sending…',
 

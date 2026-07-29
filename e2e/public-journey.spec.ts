@@ -97,7 +97,7 @@ test('a visitor enters, confirms, and receives one number', async ({ page }) => 
   await page.getByLabel('First name').fill('Ada');
   await page.getByLabel('Province / State / Region').fill('Ontario');
   await page.getByLabel(/Email address/).fill(email);
-  await page.getByRole('checkbox').check();
+  await page.getByRole('checkbox').first().check();
 
   const submit = page.getByRole('button', { name: 'Send confirmation email' });
   await expect(submit).toBeEnabled({ timeout: 15_000 });
@@ -176,7 +176,7 @@ test('an expired link sends the visitor back to the form', async ({ page }) => {
 
   await page.goto(`/${campaign.slug}`);
   await page.getByLabel(/Email address/).fill(email);
-  await page.getByRole('checkbox').check();
+  await page.getByRole('checkbox').first().check();
   const submit = page.getByRole('button', { name: 'Send confirmation email' });
   await expect(submit).toBeEnabled({ timeout: 15_000 });
   await submit.click();

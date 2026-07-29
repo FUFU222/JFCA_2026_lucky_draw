@@ -14,6 +14,8 @@ export const ENTRY_COLUMNS = [
   'locale',
   'terms_version',
   'terms_consented_at',
+  'marketing_consent',
+  'marketing_consent_at',
   'first_name',
   'last_name',
   'phone',

@@ -19,6 +19,7 @@ export async function POST(request: Request, context: { params: Promise<{ eventS
     eventSlug,
     email: body.email,
     termsConsent: body.terms_consent,
+    marketingConsent: body.marketing_consent,
     turnstileToken: body.turnstile_token,
     ipAddress: clientIpAddress(request),
     firstName: body.first_name,

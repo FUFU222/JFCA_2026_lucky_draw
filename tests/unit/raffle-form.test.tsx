@@ -29,6 +29,19 @@ function renderForm() {
   );
 }
 
+/**
+ * The required agreement, not the optional marketing box beside it. Entry is
+ * conditional on this one only, so a query that could match either would let a
+ * regression in that distinction pass unnoticed.
+ */
+function agreementCheckbox() {
+  return screen.getAllByRole('checkbox')[0];
+}
+
+function marketingCheckbox() {
+  return screen.getAllByRole('checkbox')[1];
+}
+
 function confirmInDialog(name: string) {
   // Scoped to the dialog on purpose: the form's own submit button is still on
   // the page behind it, and a query across the whole screen would be ambiguous
@@ -38,7 +51,7 @@ function confirmInDialog(name: string) {
 
 async function fillAndOpenDialog(email = 'person@example.com') {
   fireEvent.change(screen.getByLabelText(/Email address/), { target: { value: email } });
-  fireEvent.click(screen.getByRole('checkbox'));
+  fireEvent.click(agreementCheckbox());
   await waitFor(() =>
     expect(screen.getByRole('button', { name: 'Send confirmation email' })).toBeEnabled(),
   );
@@ -150,8 +163,47 @@ describe('required information', () => {
     });
     expect(submit).toBeDisabled();
 
-    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(agreementCheckbox());
     await waitFor(() => expect(submit).toBeEnabled());
+  });
+
+  it('never makes the marketing box a condition of entering', async () => {
+    renderForm();
+    const submit = screen.getByRole('button', { name: 'Send confirmation email' });
+
+    expect(marketingCheckbox()).not.toBeChecked();
+
+    fireEvent.change(screen.getByLabelText(/Email address/), {
+      target: { value: 'person@example.com' },
+    });
+    fireEvent.click(agreementCheckbox());
+
+    // Entering the draw and agreeing to be marketed at are separate acts. The
+    // event is in Canada, where consent to commercial email cannot be bundled
+    // into the thing the visitor actually came for.
+    await waitFor(() => expect(submit).toBeEnabled());
+    expect(marketingCheckbox()).not.toBeChecked();
+  });
+
+  it('sends the marketing answer the visitor actually gave', async () => {
+    renderForm();
+    fireEvent.change(screen.getByLabelText(/Email address/), {
+      target: { value: 'person@example.com' },
+    });
+    fireEvent.click(agreementCheckbox());
+    fireEvent.click(marketingCheckbox());
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Send confirmation email' })).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Send confirmation email' }));
+    await screen.findByRole('dialog');
+    confirmInDialog('Send email');
+
+    await screen.findByRole('heading', { name: 'Check your email' });
+    const [, init] = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(JSON.parse((init as RequestInit).body as string)).toMatchObject({
+      marketing_consent: true,
+    });
   });
 
   it('stays disabled when the captcha could not be solved', async () => {
@@ -162,7 +214,7 @@ describe('required information', () => {
     fireEvent.change(screen.getByLabelText(/Email address/), {
       target: { value: 'person@example.com' },
     });
-    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(agreementCheckbox());
 
     expect(screen.getByRole('button', { name: 'Send confirmation email' })).toBeDisabled();
     expect(screen.getByText(/did not pass/i)).toBeInTheDocument();

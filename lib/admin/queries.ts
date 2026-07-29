@@ -152,7 +152,7 @@ export async function searchEntries({
 }
 
 const EXPORT_COLUMNS =
-  'number, email, state, verified_at, locale, terms_version, terms_consented_at, first_name, last_name, phone, gender, date_of_birth, country, region, created_at';
+  'number, email, state, verified_at, locale, terms_version, terms_consented_at, marketing_consent, marketing_consent_at, first_name, last_name, phone, gender, date_of_birth, country, region, created_at';
 const EXPORT_PAGE_SIZE = 500;
 
 /**

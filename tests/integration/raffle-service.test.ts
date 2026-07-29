@@ -357,6 +357,50 @@ describe('RaffleService registration', () => {
   });
 });
 
+describe('RaffleService marketing consent', () => {
+  it('does not subscribe anyone who simply enters the draw', async () => {
+    const { service, repository } = buildService();
+
+    // Entering must never be the act that signs someone up. The form's second
+    // box is optional and this request is what leaving it alone looks like.
+    await expect(service.requestVerification(validRequest)).resolves.toEqual({ accepted: true });
+
+    expect(repository.entries[0]).toMatchObject({
+      marketing_consent: false,
+      marketing_consent_at: null,
+    });
+  });
+
+  it('records when consent was given, not just that it was', async () => {
+    const { service, repository } = buildService();
+
+    await service.requestVerification({ ...validRequest, marketingConsent: true });
+
+    // Proving consent is the sender's job under CASL, and "they ticked it at
+    // some point" is not proof.
+    expect(repository.entries[0]).toMatchObject({
+      marketing_consent: true,
+      marketing_consent_at: now.toISOString(),
+    });
+  });
+
+  it('lets a resubmission withdraw it, and clears the timestamp with it', async () => {
+    let clock = now;
+    const { service, repository } = buildService({ clock: () => clock });
+    await service.requestVerification({ ...validRequest, marketingConsent: true });
+
+    clock = new Date(now.getTime() + 5 * 60 * 1000);
+    await service.requestVerification({ ...validRequest, marketingConsent: false });
+
+    // The stored answer is always the visitor's most recent one; a timestamp
+    // left behind would claim a consent that no longer exists.
+    expect(repository.entries[0]).toMatchObject({
+      marketing_consent: false,
+      marketing_consent_at: null,
+    });
+  });
+});
+
 describe('RaffleService resend', () => {
   it('reuses an active token and enforces the cooldown and the send ceiling', async () => {
     let clock = now;

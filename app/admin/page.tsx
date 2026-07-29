@@ -97,11 +97,10 @@ export default async function AdminDashboard() {
 
         {campaign.opens_at === null && campaign.draw_starts_at === null && (
           <p className="text-sm text-neutral-600">
-            日程は設定されていません。受付の開閉はこのボタン操作だけで決まります。
             <strong className="font-semibold text-neutral-900">
-              抽選用のCSVを取得する前に、必ず「受付を終了」してください。
-            </strong>
-            確認リンクは24時間有効なので、終了するまでは未確認の人が後から番号を取得できます。
+              CSVを取る前に「受付を終了」。
+            </strong>{' '}
+            終了するまでは、後から番号が増えます。
           </p>
         )}
         <p className="text-sm text-neutral-600">
@@ -112,7 +111,7 @@ export default async function AdminDashboard() {
           >
             テストモードで開く
           </Link>{' '}
-          — 本物のフォームとメールを使いますが、抽選対象にならない番号が発行され、集計やCSVエクスポートからは除外されます。
+          — 本物の流れをそのまま試せます。抽選には入りません。
         </p>
       </section>
 

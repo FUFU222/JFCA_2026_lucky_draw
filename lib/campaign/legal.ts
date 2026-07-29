@@ -41,8 +41,8 @@ const TERMS: readonly TermsSection[] = [
   {
     heading: 'Your email address',
     paragraphs: [
-      'Your address is used to confirm your entry and to send your number.',
-      'It is also used to send you LIVAPON news and campaign information. Every message includes a way to stop receiving them.',
+      'Your address is used to confirm your entry and to send your number. That is all entering requires.',
+      'LIVAPON news and offers are a separate, optional choice on the entry form. Leaving it unticked does not affect your entry. If you do tick it, every message includes a way to stop receiving them.',
       'Personal information is handled as described in the LIVAPON Privacy Policy.',
     ],
   },

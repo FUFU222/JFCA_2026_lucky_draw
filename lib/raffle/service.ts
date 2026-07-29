@@ -250,6 +250,15 @@ export class RaffleService {
       region: request.region,
     };
 
+    // Recorded with the moment it was given, because proving consent is the
+    // sender's job under CASL and "they ticked it at some point" is not proof.
+    // Withdrawn on a resubmission that leaves the box alone, so the stored
+    // answer is always the visitor's most recent one.
+    const marketing = {
+      marketing_consent: request.marketingConsent,
+      marketing_consent_at: request.marketingConsent ? this.now().toISOString() : null,
+    };
+
     const entry = workingEntry
       ? await this.dependencies.repository.updatePendingEntry(workingEntry.id, {
           locale: 'en',
@@ -260,6 +269,7 @@ export class RaffleService {
           // takes the address back from a rehearsal, because a test entry is
           // disposable and a visitor's entry is not.
           is_test: isTest,
+          ...marketing,
           // Only fields the visitor supplied this time are written, so a second
           // submission with a blank form never erases an earlier profile.
           ...definedOnly(profile),
@@ -271,6 +281,7 @@ export class RaffleService {
           terms_version: campaign.terms_version,
           terms_consented_at: this.now().toISOString(),
           is_test: isTest,
+          ...marketing,
           first_name: profile.first_name ?? null,
           last_name: profile.last_name ?? null,
           phone: profile.phone ?? null,

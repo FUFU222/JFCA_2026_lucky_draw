@@ -67,6 +67,8 @@ describe('entriesToCsv', () => {
       'locale',
       'terms_version',
       'terms_consented_at',
+      'marketing_consent',
+      'marketing_consent_at',
       'first_name',
       'last_name',
       'phone',
@@ -85,7 +87,7 @@ describe('entriesToCsv', () => {
     const csv = entriesToCsv([]).slice(UTF8_BOM.length);
 
     expect(csv).toBe(
-      'number,email,state,verified_at,locale,terms_version,terms_consented_at,first_name,last_name,phone,gender,date_of_birth,country,region,created_at\r\n',
+      'number,email,state,verified_at,locale,terms_version,terms_consented_at,marketing_consent,marketing_consent_at,first_name,last_name,phone,gender,date_of_birth,country,region,created_at\r\n',
     );
   });
 

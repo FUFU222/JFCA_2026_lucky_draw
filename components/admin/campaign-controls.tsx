@@ -132,7 +132,7 @@ export function CampaignControls({ status }: { status: string }) {
     <div className="space-y-3">
       {status === 'CLOSED' && (
         <p className="text-[15px] text-neutral-600">
-          このイベントの受付は終了しています。誤って終了した場合は再開できます。
+          受付は終了しています。誤って押した場合は再開できます。
         </p>
       )}
 

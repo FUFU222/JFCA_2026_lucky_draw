@@ -50,6 +50,9 @@ export const verificationRequestSchema = z
     eventSlug: z.string().min(1).max(100),
     email: emailField,
     termsConsent: z.literal(true),
+    // Optional and independent of entry: unchecked means not a subscriber, and
+    // that is the default a visitor gets by doing nothing.
+    marketingConsent: z.boolean().optional().default(false),
     // Required unless a verified test-mode session waives it — see
     // `RaffleService.requestVerification`, which is where that's enforced,
     // since only the server can confirm the operator session that unlocks it.

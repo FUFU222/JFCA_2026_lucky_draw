@@ -292,6 +292,8 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
       terms_version: 'repo-test-v1',
       terms_consented_at: new Date().toISOString(),
       is_test: false,
+      marketing_consent: false,
+      marketing_consent_at: null,
       first_name: null,
       last_name: null,
       phone: null,
