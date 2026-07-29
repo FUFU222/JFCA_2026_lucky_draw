@@ -509,6 +509,16 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
     await expect(
       service.confirmVerification({ eventSlug: campaign.slug, token: testLink.token }),
     ).resolves.toMatchObject({ number: BigInt(900_000_001) });
+
+    // `confirmVerification` collapses every RD001 to null, so a null on its own
+    // would also be satisfied by a gate that raised *after* taking a number.
+    // What the gate is for is the counter, so the counter is what is asserted.
+    const { data: after } = await supabase
+      .from('campaigns')
+      .select('next_number')
+      .eq('id', campaign.id)
+      .single();
+    expect(after?.next_number).toBe(10_000);
   });
 
   it('tells a link holder the event is over rather than that their link expired', async () => {
@@ -541,6 +551,19 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
     await expect(verificationLinkState(campaign.slug, realLink.token)).resolves.toBe('event_over');
     // A rehearsal after closing is exactly what test mode is for.
     await expect(verificationLinkState(campaign.slug, testLink.token)).resolves.toBe('usable');
+
+    // Expired as well as closed still reads as the event being over. Checking
+    // expiry first would send this holder back to the entry form and into
+    // "Entries are closed" one tap later — the wall this state removes.
+    const { data: entries } = await supabase
+      .from('raffle_entries')
+      .select('id')
+      .eq('campaign_id', campaign.id);
+    await supabase
+      .from('verification_tokens')
+      .update({ expires_at: new Date(Date.now() - 1_000).toISOString() })
+      .in('entry_id', (entries ?? []).map((e) => e.id));
+    await expect(verificationLinkState(campaign.slug, realLink.token)).resolves.toBe('event_over');
   });
 
   it('answers a stale link from an earlier cycle as unusable, not as a server fault', async () => {

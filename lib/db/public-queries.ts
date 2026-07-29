@@ -41,8 +41,11 @@ function first<T>(value: Nested<T> | undefined): T | undefined {
  * "Entries are closed." Now that closing is the one and only way this event
  * ends, that is not an edge case: it is what every unconfirmed entrant is told
  * at the same moment. The condition mirrors the gate inside
- * `confirm_raffle_verification`, rehearsal exemption included, so the page and
- * the RPC cannot disagree about who is too late.
+ * `confirm_raffle_verification`, rehearsal exemption included, and it is
+ * checked in the same order the RPC checks it — after "already used", before
+ * "expired" — because a link that is both expired and belongs to a closed
+ * event is still someone whose event is over, and sending them back to the
+ * form would rebuild the double wall this exists to remove.
  */
 export async function verificationLinkState(
   eventSlug: string,
@@ -68,7 +71,6 @@ export async function verificationLinkState(
   const campaign = first(entry?.campaigns);
   if (campaign?.slug !== eventSlug) return 'unusable';
   if (row.consumed_at !== null) return 'unusable';
-  if (new Date(row.expires_at).getTime() <= Date.now()) return 'unusable';
 
   // A rehearsal is exempt for the same reason it is exempt in the RPC: the
   // operator needs the journey to work outside the window visitors get.
@@ -79,6 +81,8 @@ export async function verificationLinkState(
       return 'event_over';
     }
   }
+
+  if (new Date(row.expires_at).getTime() <= Date.now()) return 'unusable';
 
   return 'usable';
 }

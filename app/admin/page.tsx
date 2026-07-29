@@ -116,9 +116,11 @@ export default async function AdminDashboard() {
           `opens_at` to now, so gating on that as well made this note vanish the
           moment it started mattering — visible only before the event, gone for
           the whole of it. What it warns about is the absence of an automatic
-          cut-off, and that is what `draw_starts_at` being unset means.
+          cut-off, and that is what `draw_starts_at` being unset means. Gone
+          again once closed, because by then it is an instruction the operator
+          has just carried out, on the very screen they export from.
         */}
-        {campaign.draw_starts_at === null && (
+        {campaign.draw_starts_at === null && campaign.status !== 'CLOSED' && (
           <p className="text-sm text-neutral-600">
             <strong className="font-semibold text-neutral-900">
               CSVを取る前に「受付を終了」。
