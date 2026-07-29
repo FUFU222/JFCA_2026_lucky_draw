@@ -45,10 +45,10 @@ async function signIn(page: Page, address: string) {
   await fetch(`${MAILPIT}/api/v1/messages`, { method: 'DELETE' }).catch(() => {});
 
   await page.goto('/admin/login');
-  await page.getByLabel('Operator email address').fill(address);
-  await page.getByRole('button', { name: 'Email me a sign-in link' }).click();
+  await page.getByLabel('運営者のメールアドレス').fill(address);
+  await page.getByRole('button', { name: 'サインインリンクを送る' }).click();
   await expect(
-    page.getByRole('heading', { name: 'Check your email' }),
+    page.getByRole('heading', { name: 'メールをご確認ください' }),
     'the sign-in link was not sent',
   ).toBeVisible();
 
@@ -59,17 +59,17 @@ async function signIn(page: Page, address: string) {
 test('the dashboard is closed to anyone without an operator session', async ({ page }) => {
   await page.goto('/admin');
   await expect(page).toHaveURL(/\/admin\/login/);
-  await expect(page.getByRole('heading', { name: 'Lucky Draw operations' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Lucky Draw 管理画面' })).toBeVisible();
 });
 
 test('an address outside the operator domain never gets a link', async ({ page }) => {
   await fetch(`${MAILPIT}/api/v1/messages`, { method: 'DELETE' }).catch(() => {});
 
   await page.goto('/admin/login');
-  await page.getByLabel('Operator email address').fill('person@example.com');
-  await page.getByRole('button', { name: 'Email me a sign-in link' }).click();
+  await page.getByLabel('運営者のメールアドレス').fill('person@example.com');
+  await page.getByRole('button', { name: 'サインインリンクを送る' }).click();
 
-  await expect(page.getByText('Use your chairman.jp address.')).toBeVisible();
+  await expect(page.getByText('chairman.jp のアドレスを使用してください。')).toBeVisible();
   const list = await fetch(`${MAILPIT}/api/v1/messages?limit=5`).then((r) => r.json());
   expect(list.messages ?? []).toHaveLength(0);
 });
@@ -105,14 +105,14 @@ test('pausing and resuming needs a confirmation and is recorded', async ({ page 
   await signIn(page, operatorAddress('ops.pause'));
 
   // Cancel changes nothing.
-  await page.getByRole('button', { name: /Pause registration|Resume registration/ }).first().click();
+  await page.getByRole('button', { name: /受付を一時停止|受付を再開/ }).first().click();
   const dialog = page.getByRole('dialog');
-  await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
+  await expect(dialog.getByRole('button', { name: 'キャンセル' })).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
 
-  await page.getByRole('button', { name: 'Pause registration' }).first().click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Pause registration' }).click();
+  await page.getByRole('button', { name: '受付を一時停止' }).first().click();
+  await page.getByRole('dialog').getByRole('button', { name: '受付を一時停止' }).click();
   await expect(page.getByText('PAUSED')).toBeVisible();
 
   const { data: paused } = await supabase
@@ -122,8 +122,8 @@ test('pausing and resuming needs a confirmation and is recorded', async ({ page 
     .limit(1);
   expect(paused).toHaveLength(1);
 
-  await page.getByRole('button', { name: 'Resume registration' }).first().click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Resume registration' }).click();
+  await page.getByRole('button', { name: '受付を再開' }).first().click();
+  await page.getByRole('dialog').getByRole('button', { name: '受付を再開' }).click();
   await expect(page.getByText('SCHEDULED')).toBeVisible();
 });
 
@@ -132,13 +132,13 @@ test('the export asks first and records who asked', async ({ page }) => {
   await signIn(page, operator);
   await page.goto('/admin/entries');
 
-  await page.getByRole('button', { name: 'Export CSV' }).click();
+  await page.getByRole('button', { name: 'CSVをエクスポート' }).click();
   const dialog = page.getByRole('dialog');
-  await expect(dialog).toContainText('email addresses');
-  await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
+  await expect(dialog).toContainText('メールアドレス');
+  await expect(dialog.getByRole('button', { name: 'キャンセル' })).toBeFocused();
 
   const download = page.waitForEvent('download');
-  await dialog.getByRole('button', { name: 'Download CSV' }).click();
+  await dialog.getByRole('button', { name: 'CSVをダウンロード' }).click();
   const file = await download;
   expect(file.suggestedFilename()).toBe('jfca-2026-entries.csv');
 
@@ -181,7 +181,7 @@ test('search finds an entry by address and by issued number', async ({ page }) =
   await expect(page.getByText(email)).toBeVisible();
 
   await page.goto('/admin/entries?q=nothing-matches-this');
-  await expect(page.getByText('Nothing matched that search.')).toBeVisible();
+  await expect(page.getByText('該当する応募が見つかりませんでした。')).toBeVisible();
 
   await supabase.from('raffle_entries').delete().eq('email', email);
 });

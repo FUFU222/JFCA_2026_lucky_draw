@@ -10,10 +10,15 @@ import { requireOperatorSession } from '../../lib/security/operator-session';
 export const dynamic = 'force-dynamic';
 
 const PHASE_LABEL = {
-  before: 'Not open yet',
-  open: 'Accepting entries',
-  closed: 'Closed',
+  before: '受付前',
+  open: '受付中',
+  closed: '受付終了',
 } as const;
+
+const ENTRY_STATE_LABEL: Record<string, string> = {
+  PENDING: '確認待ち',
+  VERIFIED: '確認済み',
+};
 
 export default async function AdminDashboard() {
   const operator = await requireOperatorSession();
@@ -25,31 +30,31 @@ export default async function AdminDashboard() {
   return (
     <AdminShell operatorEmail={operator.email} title={campaign.title}>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Verified entries" value={verified} />
-        <StatCard label="Awaiting confirmation" value={pending} />
-        <StatCard label="Next number" value={campaign.next_number} />
-        <StatCard label="Emails waiting to send" value={outboxWaiting} />
+        <StatCard label="確認済み応募数" value={verified} />
+        <StatCard label="確認待ち" value={pending} />
+        <StatCard label="次の発行番号" value={campaign.next_number} />
+        <StatCard label="送信待ちメール数" value={outboxWaiting} />
       </div>
 
       <section className="mt-10 space-y-4">
-        <h2 className="text-lg font-bold text-neutral-900">Registration</h2>
+        <h2 className="text-lg font-bold text-neutral-900">受付状況</h2>
         <dl className="grid gap-2 text-[15px] sm:grid-cols-2">
           <div className="flex gap-2">
-            <dt className="text-neutral-600">State</dt>
+            <dt className="text-neutral-600">状態</dt>
             <dd className="font-semibold text-neutral-900">
-              {PHASE_LABEL[registrationPhase(campaign)]} ({campaign.status})
+              {PHASE_LABEL[registrationPhase(campaign)]}（{campaign.status}）
             </dd>
           </div>
           <div className="flex gap-2">
-            <dt className="text-neutral-600">Opens</dt>
-            <dd className="font-mono text-neutral-900">{campaign.opens_at ?? 'not set'}</dd>
+            <dt className="text-neutral-600">開始日時</dt>
+            <dd className="font-mono text-neutral-900">{campaign.opens_at ?? '未設定'}</dd>
           </div>
           <div className="flex gap-2">
-            <dt className="text-neutral-600">Draw starts</dt>
-            <dd className="font-mono text-neutral-900">{campaign.draw_starts_at ?? 'not set'}</dd>
+            <dt className="text-neutral-600">抽選開始日時</dt>
+            <dd className="font-mono text-neutral-900">{campaign.draw_starts_at ?? '未設定'}</dd>
           </div>
           <div className="flex gap-2">
-            <dt className="text-neutral-600">Terms version</dt>
+            <dt className="text-neutral-600">規約バージョン</dt>
             <dd className="font-mono text-neutral-900">{campaign.terms_version}</dd>
           </div>
         </dl>
@@ -60,17 +65,16 @@ export default async function AdminDashboard() {
             target="_blank"
             className="font-medium text-neutral-900 underline underline-offset-2"
           >
-            Open in test mode
+            テストモードで開く
           </Link>{' '}
-          — the real form and emails, but issued a number no draw can win and left out of every
-          count and export.
+          — 本物のフォームとメールを使いますが、抽選対象にならない番号が発行され、集計やCSVエクスポートからは除外されます。
         </p>
       </section>
 
       <section className="mt-10 space-y-3">
-        <h2 className="text-lg font-bold text-neutral-900">Recent entries</h2>
+        <h2 className="text-lg font-bold text-neutral-900">最近の応募</h2>
         {recentEntries.length === 0 ? (
-          <p className="text-[15px] text-neutral-600">No entries yet.</p>
+          <p className="text-[15px] text-neutral-600">まだ応募はありません。</p>
         ) : (
           <ul className="divide-y divide-neutral-200 rounded-xl border border-neutral-200">
             {recentEntries.map((entry) => (
@@ -79,10 +83,12 @@ export default async function AdminDashboard() {
                   {entry.number ?? '—'}
                 </span>
                 <span className="text-[15px] text-neutral-900">{entry.email}</span>
-                <span className="text-sm text-neutral-500">{entry.state}</span>
+                <span className="text-sm text-neutral-500">
+                  {ENTRY_STATE_LABEL[entry.state] ?? entry.state}
+                </span>
                 {entry.is_test && (
                   <span className="rounded-full bg-[var(--brand-tint)] px-2 py-0.5 text-xs font-semibold text-[var(--brand-accent)]">
-                    TEST
+                    テスト
                   </span>
                 )}
                 <span className="ml-auto font-mono text-xs text-neutral-500">
@@ -95,9 +101,9 @@ export default async function AdminDashboard() {
       </section>
 
       <section className="mt-10 space-y-3">
-        <h2 className="text-lg font-bold text-neutral-900">Email delivery failures</h2>
+        <h2 className="text-lg font-bold text-neutral-900">メール配信エラー</h2>
         {failedDeliveries.length === 0 ? (
-          <p className="text-[15px] text-neutral-600">No failures recorded.</p>
+          <p className="text-[15px] text-neutral-600">エラーの記録はありません。</p>
         ) : (
           <ul className="divide-y divide-neutral-200 rounded-xl border border-neutral-200">
             {failedDeliveries.map((failure) => (
@@ -105,7 +111,7 @@ export default async function AdminDashboard() {
                 <p className="text-[15px] text-neutral-900">
                   {failure.email} <span className="text-neutral-500">({failure.kind})</span>
                 </p>
-                <p className="mt-1 text-sm text-[#c8102e]">{failure.error ?? 'unknown error'}</p>
+                <p className="mt-1 text-sm text-[#c8102e]">{failure.error ?? '不明なエラー'}</p>
                 <p className="mt-1 font-mono text-xs text-neutral-500">{failure.attemptedAt}</p>
               </li>
             ))}

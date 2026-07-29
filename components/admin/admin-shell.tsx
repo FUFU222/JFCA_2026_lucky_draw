@@ -11,24 +11,24 @@ export function AdminShell({
   children: ReactNode;
 }) {
   return (
-    <main className="mx-auto min-h-dvh w-full max-w-4xl px-5 pb-16 pt-6">
+    <main lang="ja" className="mx-auto min-h-dvh w-full max-w-4xl px-5 pb-16 pt-6">
       <header className="mb-8 flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200 pb-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
-            Lucky Draw operations
+            Lucky Draw 管理画面
           </p>
           <h1 className="text-xl font-bold text-neutral-900">{title}</h1>
         </div>
         <div className="flex items-center gap-4 text-sm">
           <nav className="flex gap-3">
             <Link href="/admin" className="font-medium text-neutral-700 underline-offset-2 hover:underline">
-              Overview
+              概要
             </Link>
             <Link
               href="/admin/entries"
               className="font-medium text-neutral-700 underline-offset-2 hover:underline"
             >
-              Entries
+              応募一覧
             </Link>
           </nav>
           <span className="text-neutral-500">{operatorEmail}</span>

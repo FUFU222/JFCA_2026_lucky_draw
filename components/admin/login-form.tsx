@@ -18,7 +18,7 @@ export function LoginForm() {
     // Checked before the link is requested as well as after the callback, so a
     // non-operator address never even causes Supabase to send mail.
     if (!isChairmanOperator(email)) {
-      setError(`Use your ${OPERATOR_DOMAIN} address.`);
+      setError(`${OPERATOR_DOMAIN} のアドレスを使用してください。`);
       return;
     }
 
@@ -36,7 +36,7 @@ export function LoginForm() {
       if (authError) throw authError;
       setStatus('sent');
     } catch {
-      setError('The link could not be sent. Try again in a moment.');
+      setError('リンクを送信できませんでした。しばらくしてからもう一度お試しください。');
       setStatus('idle');
     }
   }
@@ -44,9 +44,9 @@ export function LoginForm() {
   if (status === 'sent') {
     return (
       <section className="space-y-3">
-        <h2 className="text-lg font-bold text-neutral-900">Check your email</h2>
+        <h2 className="text-lg font-bold text-neutral-900">メールをご確認ください</h2>
         <p className="text-[15px] leading-relaxed text-neutral-700">
-          A sign-in link is on its way to {email.trim().toLowerCase()}.
+          {email.trim().toLowerCase()} 宛にサインインリンクを送信しました。
         </p>
       </section>
     );
@@ -56,7 +56,7 @@ export function LoginForm() {
     <form onSubmit={requestLink} className="space-y-4" noValidate>
       <div className="space-y-1.5">
         <label htmlFor="operator-email" className="block text-sm font-medium text-neutral-800">
-          Operator email address
+          運営者のメールアドレス
         </label>
         <input
           id="operator-email"
@@ -80,7 +80,7 @@ export function LoginForm() {
         disabled={status === 'sending'}
         className="min-h-12 w-full rounded-lg bg-neutral-900 px-5 text-base font-semibold text-white disabled:opacity-50"
       >
-        {status === 'sending' ? 'Sending…' : 'Email me a sign-in link'}
+        {status === 'sending' ? '送信中…' : 'サインインリンクを送る'}
       </button>
     </form>
   );

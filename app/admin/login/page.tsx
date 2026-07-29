@@ -7,8 +7,8 @@ import { getOperatorSession } from '../../../lib/security/operator-session';
 export const dynamic = 'force-dynamic';
 
 const ERRORS: Record<string, string> = {
-  link: 'That sign-in link could not be used. Request a new one.',
-  forbidden: `Only ${OPERATOR_DOMAIN} addresses can sign in.`,
+  link: 'このサインインリンクは使用できませんでした。もう一度リクエストしてください。',
+  forbidden: `${OPERATOR_DOMAIN} のアドレスのみサインインできます。`,
 };
 
 export default async function AdminLoginPage({
@@ -20,10 +20,10 @@ export default async function AdminLoginPage({
   const { error } = await searchParams;
 
   return (
-    <main className="mx-auto min-h-dvh w-full max-w-md px-5 py-16">
-      <h1 className="text-2xl font-bold text-neutral-900">Lucky Draw operations</h1>
+    <main lang="ja" className="mx-auto min-h-dvh w-full max-w-md px-5 py-16">
+      <h1 className="text-2xl font-bold text-neutral-900">Lucky Draw 管理画面</h1>
       <p className="mt-2 text-[15px] leading-relaxed text-neutral-600">
-        Sign in with your {OPERATOR_DOMAIN} address. We email you a link.
+        {OPERATOR_DOMAIN} のメールアドレスでサインインしてください。サインインリンクをメールでお送りします。
       </p>
 
       {error && ERRORS[error] && (

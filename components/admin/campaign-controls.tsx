@@ -26,9 +26,9 @@ function actionsFor(status: string): ActionSpec[] {
       return [
         {
           action: 'START',
-          label: 'Start entries now',
-          dialogTitle: 'Start entries now?',
-          dialogBody: 'Visitors will be able to enter immediately.',
+          label: '今すぐ受付を開始',
+          dialogTitle: '今すぐ受付を開始しますか？',
+          dialogBody: '来場者はすぐに応募できるようになります。',
           variant: 'primary',
         },
       ];
@@ -36,18 +36,18 @@ function actionsFor(status: string): ActionSpec[] {
       return [
         {
           action: 'PAUSE',
-          label: 'Pause registration',
-          dialogTitle: 'Pause registration?',
+          label: '受付を一時停止',
+          dialogTitle: '受付を一時停止しますか？',
           dialogBody:
-            'Visitors will stop being able to enter immediately. Numbers already issued are unaffected.',
+            '来場者はすぐに応募できなくなります。すでに発行された番号への影響はありません。',
           variant: 'secondary',
         },
         {
           action: 'CLOSE',
-          label: 'Close entries',
-          dialogTitle: 'Close entries?',
+          label: '受付を終了',
+          dialogTitle: '受付を終了しますか？',
           dialogBody:
-            'Unlike pausing, this cannot be undone from here. Entry and confirmation are both refused from now on. Numbers already issued are unaffected.',
+            '一時停止と異なり、この画面から元に戻すことはできません。以後、応募・確認ともに受け付けなくなります。すでに発行された番号への影響はありません。',
           variant: 'secondary',
         },
       ];
@@ -55,17 +55,17 @@ function actionsFor(status: string): ActionSpec[] {
       return [
         {
           action: 'RESUME',
-          label: 'Resume registration',
-          dialogTitle: 'Resume registration?',
-          dialogBody: 'Visitors will be able to enter again immediately.',
+          label: '受付を再開',
+          dialogTitle: '受付を再開しますか？',
+          dialogBody: '来場者はすぐにまた応募できるようになります。',
           variant: 'primary',
         },
         {
           action: 'CLOSE',
-          label: 'Close entries',
-          dialogTitle: 'Close entries?',
+          label: '受付を終了',
+          dialogTitle: '受付を終了しますか？',
           dialogBody:
-            'Unlike pausing, this cannot be undone from here. Entry and confirmation are both refused from now on. Numbers already issued are unaffected.',
+            '一時停止と異なり、この画面から元に戻すことはできません。以後、応募・確認ともに受け付けなくなります。すでに発行された番号への影響はありません。',
           variant: 'secondary',
         },
       ];
@@ -101,7 +101,7 @@ export function CampaignControls({
       if (!response.ok) throw new Error('failed');
       router.refresh();
     } catch {
-      setError('The change could not be applied.');
+      setError('変更を適用できませんでした。');
     } finally {
       setBusy(false);
       setPendingAction(null);
@@ -109,7 +109,7 @@ export function CampaignControls({
   }
 
   if (status === 'CLOSED') {
-    return <p className="text-[15px] text-neutral-600">Entries are closed for this event.</p>;
+    return <p className="text-[15px] text-neutral-600">このイベントの受付は終了しました。</p>;
   }
 
   return (
@@ -134,8 +134,7 @@ export function CampaignControls({
 
       {startBlocked && (
         <p className="text-sm text-neutral-600">
-          Set a draw time first — see the event schedule step in the pre-launch checklist. Entries
-          cannot be started without one.
+          先に抽選日時を設定してください（事前準備チェックリストのイベントスケジュールの手順を参照）。設定しないと受付を開始できません。
         </p>
       )}
 
@@ -150,9 +149,9 @@ export function CampaignControls({
           open
           title={pendingAction.dialogTitle}
           confirmLabel={pendingAction.label}
-          cancelLabel="Cancel"
+          cancelLabel="キャンセル"
           busy={busy}
-          busyLabel="Applying…"
+          busyLabel="適用中…"
           onCancel={() => setPendingAction(null)}
           onConfirm={() => apply(pendingAction.action)}
         >

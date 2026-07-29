@@ -23,22 +23,19 @@ export function ExportButton({ eventSlug, entryCount }: { eventSlug: string; ent
         onClick={() => setDialogOpen(true)}
         className="min-h-12 rounded-lg border border-neutral-300 px-5 text-base font-semibold text-neutral-900"
       >
-        Export CSV
+        CSVをエクスポート
       </button>
 
       <ConfirmationDialog
         open={dialogOpen}
-        title="Export entrant data?"
-        confirmLabel="Download CSV"
-        cancelLabel="Cancel"
+        title="応募者データをエクスポートしますか？"
+        confirmLabel="CSVをダウンロード"
+        cancelLabel="キャンセル"
         onCancel={() => setDialogOpen(false)}
         onConfirm={download}
       >
-        <p>
-          This downloads {entryCount} {entryCount === 1 ? 'entry' : 'entries'} including email
-          addresses and profile details.
-        </p>
-        <p>The export is recorded against your account.</p>
+        <p>メールアドレスやプロフィール情報を含む{entryCount}件のデータをダウンロードします。</p>
+        <p>エクスポートはあなたのアカウントに記録されます。</p>
       </ConfirmationDialog>
     </>
   );

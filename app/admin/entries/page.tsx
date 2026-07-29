@@ -8,6 +8,11 @@ import { requireOperatorSession } from '../../../lib/security/operator-session';
 
 export const dynamic = 'force-dynamic';
 
+const ENTRY_STATE_LABEL: Record<string, string> = {
+  PENDING: '確認待ち',
+  VERIFIED: '確認済み',
+};
+
 export default async function AdminEntriesPage({
   searchParams,
 }: {
@@ -21,11 +26,11 @@ export default async function AdminEntriesPage({
   const entries = await searchEntries({ campaignId: dashboard.campaign.id, query: q });
 
   return (
-    <AdminShell operatorEmail={operator.email} title="Entries">
+    <AdminShell operatorEmail={operator.email} title="応募一覧">
       <form method="get" className="flex flex-wrap items-end gap-3">
         <div className="min-w-64 flex-1 space-y-1.5">
           <label htmlFor="q" className="block text-sm font-medium text-neutral-800">
-            Search by email address or issued number
+            メールアドレスまたは発行番号で検索
           </label>
           <input
             id="q"
@@ -38,7 +43,7 @@ export default async function AdminEntriesPage({
           type="submit"
           className="min-h-12 rounded-lg bg-neutral-900 px-5 text-base font-semibold text-white"
         >
-          Search
+          検索
         </button>
         <ExportButton
           eventSlug={ACTIVE_CAMPAIGN_SLUG}
@@ -48,27 +53,24 @@ export default async function AdminEntriesPage({
 
       <p className="mt-6 text-sm text-neutral-600">
         {entries.length === 100
-          ? 'Showing the first 100 matches. Narrow the search to see more.'
-          : `${entries.length} ${entries.length === 1 ? 'match' : 'matches'}.`}
+          ? '最初の100件を表示しています。絞り込むとさらに表示できます。'
+          : `${entries.length}件`}
       </p>
 
       <table className="mt-3 w-full border-collapse text-left text-[15px]">
         <thead>
           <tr className="border-b border-neutral-300 text-sm text-neutral-600">
             <th scope="col" className="py-2 pr-4 font-medium">
-              Number
+              番号
             </th>
             <th scope="col" className="py-2 pr-4 font-medium">
-              Email
+              メールアドレス
             </th>
             <th scope="col" className="py-2 pr-4 font-medium">
-              State
-            </th>
-            <th scope="col" className="py-2 pr-4 font-medium">
-              Language
+              状態
             </th>
             <th scope="col" className="py-2 font-medium">
-              Entered
+              応募日時
             </th>
           </tr>
         </thead>
@@ -80,12 +82,13 @@ export default async function AdminEntriesPage({
                 {entry.email}
                 {entry.is_test && (
                   <span className="ml-2 rounded-full bg-[var(--brand-tint)] px-2 py-0.5 text-xs font-semibold text-[var(--brand-accent)]">
-                    TEST
+                    テスト
                   </span>
                 )}
               </td>
-              <td className="py-2 pr-4 text-neutral-600">{entry.state}</td>
-              <td className="py-2 pr-4 text-neutral-600">{entry.locale}</td>
+              <td className="py-2 pr-4 text-neutral-600">
+                {ENTRY_STATE_LABEL[entry.state] ?? entry.state}
+              </td>
               <td className="py-2 font-mono text-xs text-neutral-500">{entry.created_at}</td>
             </tr>
           ))}
@@ -93,7 +96,7 @@ export default async function AdminEntriesPage({
       </table>
 
       {entries.length === 0 && (
-        <p className="mt-4 text-[15px] text-neutral-600">Nothing matched that search.</p>
+        <p className="mt-4 text-[15px] text-neutral-600">該当する応募が見つかりませんでした。</p>
       )}
     </AdminShell>
   );
