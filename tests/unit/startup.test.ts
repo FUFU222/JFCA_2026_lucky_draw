@@ -36,6 +36,33 @@ describe('assertRaffleConfiguration', () => {
     ).toThrow('Cloudflare test secret');
   });
 
+  it('accepts the request limits when they are absent or valid', () => {
+    expect(() => assertRaffleConfiguration(productionEnv, true)).not.toThrow();
+    expect(() =>
+      assertRaffleConfiguration({ ...productionEnv, RAFFLE_IP_REQUEST_LIMIT: '100000' }, true),
+    ).not.toThrow();
+    // Pasting into a dashboard leaves whitespace often enough to matter.
+    expect(() =>
+      assertRaffleConfiguration({ ...productionEnv, RAFFLE_IP_REQUEST_LIMIT: ' 100000\n' }, true),
+    ).not.toThrow();
+  });
+
+  it('refuses a request limit that would silently fall back to the default', () => {
+    // The failure this prevents is invisible: the venue's shared address hits
+    // the default ceiling an hour in and nothing says why.
+    // `1e5` is deliberately absent: it parses to exactly 100000, so it is
+    // accepted rather than refused — the guard is about values that would fall
+    // back, not about spelling.
+    for (const bad of ['100,000', '100 000', '0', '-1', 'lots']) {
+      expect(() =>
+        assertRaffleConfiguration({ ...productionEnv, RAFFLE_IP_REQUEST_LIMIT: bad }, true),
+      ).toThrow('RAFFLE_IP_REQUEST_LIMIT must be a positive integer');
+    }
+    expect(() =>
+      assertRaffleConfiguration({ ...productionEnv, RAFFLE_EMAIL_REQUEST_LIMIT: 'five' }, true),
+    ).toThrow('RAFFLE_EMAIL_REQUEST_LIMIT must be a positive integer');
+  });
+
   it('catches a missing anon key, which otherwise only surfaces at an operator sign-in', () => {
     expect(() =>
       assertRaffleConfiguration({ ...productionEnv, NEXT_PUBLIC_SUPABASE_ANON_KEY: '' }, true),

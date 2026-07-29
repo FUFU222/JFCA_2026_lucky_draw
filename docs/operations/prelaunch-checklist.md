@@ -112,11 +112,14 @@ step in [on-site-runbook.md](on-site-runbook.md). Cancel by **2026-08-31**.
       are correct before relying on the schedule.
 - [ ] The worker declares `maxDuration = 60`. Confirm the Vercel plan allows it;
       the deploy fails loudly if not.
-- [ ] **Set `RAFFLE_IP_REQUEST_LIMIT` high — 100000.** The window is a fixed 24
-      hours, not a sliding one, so a venue wifi or carrier NAT address that
-      crosses the limit stays blocked for the rest of the event. The default of
-      500 is measured to be reached within the first hour at this scale. The
-      per-address limit of 5 is the one that protects a person; leave it alone.
+- [x] **Set `RAFFLE_IP_REQUEST_LIMIT` high — 100000.** Done 2026-07-29. The
+      window is a fixed 24 hours, not a sliding one, so a venue wifi or carrier
+      NAT address that crosses the limit stays blocked for the rest of the
+      event. The default of 500 is measured to be reached within the first hour
+      at this scale. The per-address limit of 5 is the one that protects a
+      person; leave it alone. A value that will not parse is refused at boot
+      rather than falling back to the default, so a typo here is a failed
+      deploy instead of a venue locked out mid-event.
 - [ ] Run the load test **without** raising the limit further, so it measures
       what the venue will actually experience.
 

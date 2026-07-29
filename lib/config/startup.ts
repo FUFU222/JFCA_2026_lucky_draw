@@ -22,6 +22,20 @@ export function assertRaffleConfiguration(
     problems.push(error instanceof Error ? error.message : 'MAIL_DELIVERY_MODE is invalid');
   }
 
+  // Both limits fall back to their default when the value will not parse, and
+  // a silent fallback is the worst outcome here: the per-IP default is reached
+  // within the first hour at venue scale, so an operator who raised it and
+  // fat-fingered the value would find the shared wifi locked out mid-event
+  // with nothing anywhere saying why. Set wrong is worse than not set.
+  for (const name of ['RAFFLE_IP_REQUEST_LIMIT', 'RAFFLE_EMAIL_REQUEST_LIMIT']) {
+    const raw = env[name]?.trim();
+    if (!raw) continue;
+    const parsed = Number(raw);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      problems.push(`${name} must be a positive integer, received "${raw}"`);
+    }
+  }
+
   if (isProduction) {
     for (const name of [
       'NEXT_PUBLIC_SUPABASE_URL',
