@@ -48,7 +48,6 @@ class MemoryRepository implements RaffleRepository {
   readonly settledJobs: Array<{ entryId: string; kind: string }> = [];
   receiptJobAvailable = true;
   confirmFailure: Error | null = null;
-  private assignedNumber: bigint | null = null;
 
   constructor(private readonly clock: () => Date = () => now) {}
 
@@ -89,6 +88,10 @@ class MemoryRepository implements RaffleRepository {
     // Mirrors the `is_test = true` guard on the real update.
     if (!entry || !entry.is_test) return null;
     Object.assign(entry, { state: 'PENDING', number: null, verified_at: null, receipt_token_hash: null });
+    // Mirrors the real reset clearing the entry's outbox rows: a receipt that
+    // was already sent must become claimable again, or the next rehearsal
+    // issues a number and silently sends no receipt.
+    this.receiptJobAvailable = true;
     return entry;
   }
 
@@ -133,11 +136,15 @@ class MemoryRepository implements RaffleRepository {
     const entry = this.entries.find((candidate) => candidate.id === token.entryId);
     if (!entry) throw new RaffleLinkError('Verification entry was not found');
 
-    // The RPC issues one number per entry and returns the same one afterwards.
-    if (this.assignedNumber === null) {
-      this.assignedNumber = BigInt(this.campaign.next_number);
+    // The RPC issues a number while the entry is still pending and returns the
+    // stored one afterwards, so a repeated confirmation is idempotent. Test
+    // entries draw from their own counter, as they do in `0006_test_mode.sql`.
+    if (entry.state === 'PENDING') {
+      const counter = entry.is_test ? 'test_next_number' : 'next_number';
+      entry.number = this.campaign[counter];
+      this.campaign[counter] += 1;
       entry.state = 'VERIFIED';
-      entry.number = Number(this.assignedNumber);
+      entry.verified_at = this.clock().toISOString();
       token.consumedAt = this.clock().toISOString();
     }
 
@@ -145,7 +152,7 @@ class MemoryRepository implements RaffleRepository {
       entryId: entry.id,
       email: entry.email,
       campaignSlug: this.campaign.slug,
-      number: this.assignedNumber,
+      number: BigInt(entry.number!),
     };
   }
 
@@ -542,9 +549,57 @@ describe('RaffleService test mode', () => {
 
     const result = await service.requestVerification({ ...validRequest, isTest: true });
 
-    expect(result).toEqual({ accepted: true });
+    expect(result).toEqual({ accepted: false, reason: 'test_address_conflict' });
     expect(repository.entries).toMatchObject([{ state: 'VERIFIED', number: 10_000, is_test: false }]);
     expect(mailer.verification).toHaveLength(1);
+  });
+
+  it('refuses to rehearse with an address a real visitor is already waiting on, rather than converting them', async () => {
+    const { service, repository, mailer } = buildService({ verifyOperatorSession: async () => true });
+    // A real visitor submits and has not opened their link yet.
+    await service.requestVerification({ ...validRequest, firstName: 'RealVisitor' });
+
+    const result = await service.requestVerification({ ...validRequest, isTest: true });
+
+    // Silently flipping this row would move that visitor into the test number
+    // range and drop them from the draw, the counts and the export.
+    expect(result).toEqual({ accepted: false, reason: 'test_address_conflict' });
+    expect(repository.entries).toMatchObject([{ is_test: false, first_name: 'RealVisitor' }]);
+    expect(mailer.verification).toHaveLength(1);
+  });
+
+  it('hands a rehearsal address back to a real visitor who submits it', async () => {
+    const { service, repository } = buildService({ verifyOperatorSession: async () => true });
+    await service.requestVerification({ ...validRequest, isTest: true });
+    expect(repository.entries).toMatchObject([{ is_test: true }]);
+
+    await service.requestVerification(validRequest);
+
+    // A rehearsal is disposable; a visitor's entry is not.
+    expect(repository.entries).toMatchObject([{ is_test: false, state: 'PENDING' }]);
+  });
+
+  it('sends the receipt email again on a second rehearsal, not only the first', async () => {
+    const { service, repository, mailer } = buildService({ verifyOperatorSession: async () => true });
+
+    await service.requestVerification({ ...validRequest, isTest: true });
+    await service.confirmVerification({
+      eventSlug: validRequest.eventSlug,
+      token: mailer.verification[0].token,
+    });
+    expect(mailer.receipts).toHaveLength(1);
+
+    // The same operator rehearses again from the same address.
+    await service.requestVerification({ ...validRequest, isTest: true });
+    await service.confirmVerification({
+      eventSlug: validRequest.eventSlug,
+      token: mailer.verification[1].token,
+    });
+
+    // The number shows on screen either way; only the mail proves the reset
+    // released the receipt job the first run had already marked as sent.
+    expect(mailer.receipts).toHaveLength(2);
+    expect(repository.entries).toHaveLength(1);
   });
 });
 

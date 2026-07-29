@@ -542,6 +542,8 @@ function errorFor(code: string | undefined, status: number, t: typeof messages.f
       return t.errorClosed;
     case 'invalid_request':
       return t.errorEmail;
+    case 'test_address_conflict':
+      return t.errorTestAddressInUse;
     default:
       return status === 429 ? t.errorRateLimited : t.errorGeneric;
   }

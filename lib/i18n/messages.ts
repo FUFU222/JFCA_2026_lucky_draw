@@ -37,6 +37,9 @@ export const messages = {
     errorRateLimited:
       'Too many attempts from this network. Ask a member of staff for help, or try again from mobile data.',
     errorClosed: 'Entries are not open at the moment.',
+    // Test mode only, so this one is read by an operator rather than a visitor.
+    errorTestAddressInUse:
+      'A real entry already uses this address, so it cannot be used for a test run. Try a different address.',
   },
 
   sendDialog: {
@@ -83,8 +86,6 @@ export const messages = {
     venue: 'Results are announced at the venue. Compare them with the number above.',
     emailed: 'We also emailed this number to you.',
     support: 'Lost your number? Contact',
-    notFoundHeading: 'This number page cannot be found',
-    notFoundBody: 'Check the link in your email, or contact',
   },
 
   schedule: {

@@ -25,6 +25,11 @@ export function assertRaffleConfiguration(
   if (isProduction) {
     for (const name of [
       'NEXT_PUBLIC_SUPABASE_URL',
+      // Only the admin sign-in reads this, so a deploy without it boots
+      // healthy, serves every visitor correctly, and fails the first time an
+      // operator tries to sign in — which is the failure mode this check
+      // exists to prevent.
+      'NEXT_PUBLIC_SUPABASE_ANON_KEY',
       'SUPABASE_SERVICE_ROLE_KEY',
       'NEXT_PUBLIC_APP_URL',
       'RESEND_API_KEY',

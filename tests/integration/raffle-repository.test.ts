@@ -215,6 +215,51 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
       token: mailer.verification[1].token,
     });
     expect(secondConfirmation?.number).toBe(BigInt(900_000_002));
+    // The number reaching the screen proves nothing about the mail: the receipt
+    // job the first run marked as sent has to be released too, or the rehearsal
+    // silently stops exercising the one email the operator most wants to see.
+    expect(mailer.receipts).toHaveLength(2);
+    expect(mailer.receipts[1].number).toBe(BigInt(900_000_002));
+  });
+
+  it('refuses a rehearsal on an address a real entry holds, and hands a rehearsal address back to a real visitor', async () => {
+    const campaign = await createOpenCampaign();
+    const mailer = new FakeMailer();
+    const service = buildService(mailer, async () => true);
+    const base = { eventSlug: campaign.slug, termsConsent: true as const, turnstileToken: 'captcha' };
+
+    const realAddress = `real-${uniqueSuffix()}@example.com`;
+    await service.requestVerification({ ...base, email: realAddress, firstName: 'RealVisitor' });
+    await expect(
+      service.requestVerification({ ...base, email: realAddress, turnstileToken: '', isTest: true }),
+    ).resolves.toEqual({ accepted: false, reason: 'test_address_conflict' });
+
+    const { data: untouched } = await supabase
+      .from('raffle_entries')
+      .select('is_test, first_name')
+      .eq('campaign_id', campaign.id)
+      .eq('email', realAddress)
+      .single();
+    expect(untouched).toMatchObject({ is_test: false, first_name: 'RealVisitor' });
+
+    // The other direction: an address an operator rehearsed with must not lock
+    // a real visitor out of it.
+    const sharedAddress = `shared-${uniqueSuffix()}@example.com`;
+    await service.requestVerification({
+      ...base,
+      email: sharedAddress,
+      turnstileToken: '',
+      isTest: true,
+    });
+    await service.requestVerification({ ...base, email: sharedAddress });
+
+    const { data: reclaimed } = await supabase
+      .from('raffle_entries')
+      .select('is_test, state')
+      .eq('campaign_id', campaign.id)
+      .eq('email', sharedAddress)
+      .single();
+    expect(reclaimed).toMatchObject({ is_test: false, state: 'PENDING' });
   });
 
   it('matches an address exactly, so a wildcard character cannot reach another entry', async () => {

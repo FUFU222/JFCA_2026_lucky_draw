@@ -77,10 +77,15 @@ export async function loadDashboard(slug: string): Promise<DashboardSummary | nu
       .eq('raffle_entries.campaign_id', campaignId)
       .order('attempted_at', { ascending: false })
       .limit(20),
+    // Scoped to this campaign's real entries, like every other figure on the
+    // dashboard: an operator watching this gauge during the event needs it to
+    // mean "visitors still waiting for mail", not "…plus my own rehearsals".
     client
       .from('email_outbox')
-      .select('id', { count: 'exact', head: true })
-      .in('status', ['PENDING', 'PROCESSING', 'FAILED']),
+      .select('id, raffle_entries!inner(campaign_id, is_test)', { count: 'exact', head: true })
+      .in('status', ['PENDING', 'PROCESSING', 'FAILED'])
+      .eq('raffle_entries.campaign_id', campaignId)
+      .eq('raffle_entries.is_test', false),
   ]);
 
   if (recent.error) throw recent.error;
@@ -130,7 +135,10 @@ export async function searchEntries({
 
   const trimmed = query?.trim();
   if (trimmed) {
-    const asNumber = /^\d+$/.test(trimmed) ? trimmed : null;
+    // Bounded to what the column can hold: a longer run of digits is a typo,
+    // and handing it to Postgres raises a numeric-overflow error that reaches
+    // the operator as a crashed page instead of "no results".
+    const asNumber = /^\d{1,18}$/.test(trimmed) ? trimmed : null;
     request = asNumber
       ? request.eq('number', asNumber)
       : // `%` and `_` are wildcards in a pattern match, so a searched address

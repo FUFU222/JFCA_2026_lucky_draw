@@ -2,9 +2,7 @@ import { notFound } from 'next/navigation';
 
 import { NumberReceipt } from '../../../../components/public/number-receipt';
 import { PageShell } from '../../../../components/public/page-shell';
-import { SUPPORT_EMAIL } from '../../../../lib/campaign/legal';
 import { findCampaign, findReceipt } from '../../../../lib/db/public-queries';
-import { messages } from '../../../../lib/i18n/messages';
 
 // The receipt is looked up per request and never cached at the edge: the token
 // is a bearer credential and its page is personal.
@@ -23,26 +21,10 @@ export default async function NumberPage({
   // A missing receipt is a real 404: a soft one invites indexing of a page
   // whose URL is a bearer token.
   if (!receipt) notFound();
-  const t = messages.receipt;
 
   return (
     <PageShell>
-      {receipt ? (
-        <NumberReceipt number={receipt.number} />
-      ) : (
-        <section className="space-y-4">
-          <h1 className="text-2xl font-bold text-neutral-900">{t.notFoundHeading}</h1>
-          <p className="text-[15px] leading-relaxed text-neutral-700">
-            {t.notFoundBody}{' '}
-            <a
-              href={`mailto:${SUPPORT_EMAIL}`}
-              className="font-medium text-neutral-900 underline underline-offset-2"
-            >
-              {SUPPORT_EMAIL}
-            </a>
-          </p>
-        </section>
-      )}
+      <NumberReceipt number={receipt.number} />
     </PageShell>
   );
 }

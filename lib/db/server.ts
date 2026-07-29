@@ -127,7 +127,21 @@ export class SupabaseRaffleRepository implements RaffleRepository {
       .select()
       .maybeSingle();
     if (error) throw error;
-    return (data as RaffleEntry | null) ?? null;
+    const entry = (data as RaffleEntry | null) ?? null;
+    if (!entry) return null;
+
+    // The entry is back to the state a brand-new one is in, so its outbox rows
+    // have to go with it. `confirm_raffle_verification` queues the receipt with
+    // `on conflict do nothing`, and a job is only claimable while it is unsent,
+    // so a row left behind at SENT would make the next rehearsal issue a number
+    // on screen and quietly send no receipt email at all.
+    const { error: outboxError } = await this.client
+      .from('email_outbox')
+      .delete()
+      .eq('entry_id', entryId);
+    if (outboxError) throw outboxError;
+
+    return entry;
   }
 
   async getLatestVerificationToken(entryId: string): Promise<VerificationToken | null> {

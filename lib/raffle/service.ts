@@ -134,7 +134,13 @@ export interface RaffleRateLimiter {
 
 export type RaffleRequestResult =
   | { accepted: true }
-  | { accepted: false; reason: 'invalid' | 'closed' | 'rate_limited' | 'turnstile' };
+  // `test_address_conflict` is the one refusal a visitor can never see: it is
+  // only reachable from a verified operator session asking to rehearse with an
+  // address a real entrant already used.
+  | {
+      accepted: false;
+      reason: 'invalid' | 'closed' | 'rate_limited' | 'turnstile' | 'test_address_conflict';
+    };
 
 export interface RaffleServiceDependencies {
   repository: RaffleRepository;
@@ -208,17 +214,26 @@ export class RaffleService {
       request.email,
     );
 
+    // One entry exists per address per campaign, so a rehearsal and a real
+    // entry cannot share one. Rather than let a rehearsal overwrite a real
+    // entrant's row — which would move them to the test number range and drop
+    // them from the draw, the counts and the export without either party
+    // noticing — the rehearsal is refused. The caller is an authenticated
+    // operator here, so saying plainly why discloses nothing.
+    if (isTest && existing && !existing.is_test) {
+      return { accepted: false, reason: 'test_address_conflict' };
+    }
+
     let workingEntry = existing;
     if (existing?.state === 'VERIFIED') {
       // A verified address normally keeps its number and its profile
       // untouched, and the response is identical to a first submission so
-      // nobody can probe it. A verified *test* entry, resubmitted from a
-      // verified test-mode session, is the one exception: it is reset back
-      // to PENDING so the operator can run the whole journey again with the
-      // same address, since asking them to burn a fresh one every rehearsal
-      // is not realistic. A real entry is never reset, even when the request
-      // claims test mode.
-      if (!isTest || !existing.is_test) return { accepted: true };
+      // nobody can probe it. A verified *test* entry is the one exception: it
+      // is reset back to PENDING, both so an operator can run the whole
+      // journey again from one address instead of burning a fresh one every
+      // rehearsal, and so a real visitor is never turned away by an address
+      // an operator happened to rehearse with.
+      if (!existing.is_test) return { accepted: true };
       workingEntry = await this.dependencies.repository.resetTestEntry(existing.id);
       // Lost a race with something else touching this entry — treat it the
       // same as any other already-verified address.
@@ -240,7 +255,11 @@ export class RaffleService {
           locale: 'en',
           terms_version: campaign.terms_version,
           terms_consented_at: this.now().toISOString(),
-          is_test: isTest || workingEntry.is_test,
+          // Never an OR against the stored flag: a rehearsal cannot reach a
+          // real entry (refused above), and a real submission deliberately
+          // takes the address back from a rehearsal, because a test entry is
+          // disposable and a visitor's entry is not.
+          is_test: isTest,
           // Only fields the visitor supplied this time are written, so a second
           // submission with a blank form never erases an earlier profile.
           ...definedOnly(profile),

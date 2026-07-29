@@ -10,11 +10,30 @@ import { requireOperatorSession } from '../../lib/security/operator-session';
 
 export const dynamic = 'force-dynamic';
 
-const PHASE_LABEL = {
-  before: '受付前',
-  open: '受付中',
-  closed: '受付終了',
-} as const;
+/**
+ * What the operator is told, which is not what a visitor is told.
+ * `registrationPhase` collapses paused and closed into one public-facing
+ * "closed", but an operator who has just pressed 受付を一時停止 must not then
+ * read 受付終了 and believe they ended the event for good. So the status drives
+ * this label, and the phase is only consulted for the two cases the status
+ * alone cannot distinguish.
+ */
+function statusLabel(campaign: Parameters<typeof registrationPhase>[0] & { status: string }): string {
+  switch (campaign.status) {
+    case 'DRAFT':
+      return '未開始';
+    case 'PAUSED':
+      return '一時停止中';
+    case 'CLOSED':
+      return '受付終了';
+  }
+
+  const phase = registrationPhase(campaign);
+  if (phase === 'open') return '受付中';
+  // Scheduled but not open: either the opening time has not arrived yet, or
+  // the cut-off ahead of the draw has already passed.
+  return phase === 'before' ? '開始待ち' : '受付終了（抽選時刻）';
+}
 
 const ENTRY_STATE_LABEL: Record<string, string> = {
   PENDING: '確認待ち',
@@ -43,7 +62,7 @@ export default async function AdminDashboard() {
           <div className="flex items-center gap-2">
             <dt className="text-neutral-600">状態</dt>
             <dd className="flex items-center gap-2 font-semibold text-neutral-900">
-              {PHASE_LABEL[registrationPhase(campaign)]}
+              {statusLabel(campaign)}
               <span className="rounded-full bg-neutral-100 px-2 py-0.5 font-mono text-xs font-medium text-neutral-500">
                 {campaign.status}
               </span>

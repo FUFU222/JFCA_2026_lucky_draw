@@ -4,6 +4,7 @@ import { assertRaffleConfiguration } from '../../lib/config/startup';
 
 const productionEnv = {
   NEXT_PUBLIC_SUPABASE_URL: 'https://project.supabase.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'anon-key',
   SUPABASE_SERVICE_ROLE_KEY: 'service-role-key',
   NEXT_PUBLIC_APP_URL: 'https://luckydraw.livapon.com',
   RESEND_API_KEY: 'resend-key',
@@ -33,6 +34,12 @@ describe('assertRaffleConfiguration', () => {
         true,
       ),
     ).toThrow('Cloudflare test secret');
+  });
+
+  it('catches a missing anon key, which otherwise only surfaces at an operator sign-in', () => {
+    expect(() =>
+      assertRaffleConfiguration({ ...productionEnv, NEXT_PUBLIC_SUPABASE_ANON_KEY: '' }, true),
+    ).toThrow('NEXT_PUBLIC_SUPABASE_ANON_KEY is not set');
   });
 
   it('names every missing production variable at once', () => {

@@ -51,5 +51,10 @@ export function raffleRequestResponse(result: RaffleRequestResult): NextResponse
       return NextResponse.json({ ok: false, error: 'try_again_later' }, { status: 429 });
     case 'closed':
       return NextResponse.json({ ok: false, error: 'registration_unavailable' }, { status: 403 });
+    // Only reachable from a verified operator session, so unlike every other
+    // answer here this one can say exactly what is wrong without disclosing
+    // anything to a visitor.
+    case 'test_address_conflict':
+      return NextResponse.json({ ok: false, error: 'test_address_conflict' }, { status: 409 });
   }
 }
