@@ -91,6 +91,9 @@ test('a visitor enters, confirms, and receives one number', async ({ page }) => 
   await page.goto(`/${campaign.slug}`);
   await expect(page.getByRole('heading', { name: 'Get your Lucky Draw number' })).toBeVisible();
 
+  // The optional half starts collapsed, so a visitor who wants to fill it in
+  // opens it first. Everything required is reachable without this step.
+  await page.getByRole('heading', { name: /Tell us a little about yourself/ }).click();
   await page.getByLabel('First name').fill('Ada');
   await page.getByLabel('Province / State / Region').fill('Ontario');
   await page.getByLabel(/Email address/).fill(email);
@@ -153,11 +156,15 @@ test('a reload in the same tab restores what was typed', async ({ page }) => {
   const campaign = await createOpenCampaign();
 
   await page.goto(`/${campaign.slug}`);
+  await page.getByRole('heading', { name: /Tell us a little about yourself/ }).click();
   await page.getByLabel('First name').fill('Ada');
   await page.getByLabel(/Email address/).fill('draft@example.com');
 
   await page.reload();
 
+  // The restored profile answer must be visible, not hidden behind the
+  // collapsed section it was typed into.
+  await expect(page.getByLabel('First name')).toBeVisible();
   await expect(page.getByLabel('First name')).toHaveValue('Ada');
   await expect(page.getByLabel(/Email address/)).toHaveValue('draft@example.com');
 });

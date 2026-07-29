@@ -165,6 +165,9 @@ rehearsal works before opening and after closing.
       valid, checked from a Toronto network or an external Toronto probe.
 - [ ] The exact production QR code scanned on a real iPhone and a real Android
       handset, on mobile data, not office wifi.
+- [ ] On both handsets, the email field, the consent line and the send button
+      are all reachable **without scrolling**. The optional profile section is a
+      collapsed row above them; opening it must reveal all seven fields.
 - [ ] A confirmation link opened, confirmed, and the number page screenshotted.
 - [ ] The same link opened a second time — it must say the link cannot be used.
 - [ ] A resend requested, and the cooldown message seen.

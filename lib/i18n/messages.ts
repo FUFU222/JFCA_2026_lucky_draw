@@ -5,7 +5,10 @@
 export const messages = {
   form: {
     profileHeading: 'Tell us a little about yourself',
-    profileNote: 'Optional. It helps us tell you about things you might like.',
+    // Sits on the collapsed summary, so a visitor can decide whether to open
+    // the section without opening it first.
+    profileOptional: 'Optional',
+    profileNote: 'It helps us tell you about things you might like.',
     firstName: 'First name',
     lastName: 'Last name',
     phone: 'Phone number',

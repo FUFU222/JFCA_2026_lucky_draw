@@ -33,6 +33,17 @@ const EMPTY_DRAFT: Draft = {
   consent: false,
 };
 
+/** The optional half of the form, the part that starts collapsed. */
+const PROFILE_FIELDS = [
+  'firstName',
+  'lastName',
+  'phone',
+  'gender',
+  'dateOfBirth',
+  'country',
+  'region',
+] as const satisfies ReadonlyArray<keyof Draft>;
+
 /**
  * The draft lives in session storage, so a reload or a mis-tap restores it but
  * closing the tab does not leave someone's address on a shared phone.
@@ -92,6 +103,7 @@ export function RaffleForm({
   const [dialog, setDialog] = useState<'none' | 'send' | 'resend'>('none');
   const [error, setError] = useState<string | null>(null);
   const [resendNote, setResendNote] = useState<string | null>(null);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   // The draft is read after mounting, never during the first render: the server
   // cannot see session storage, and rendering a different value here would make
@@ -103,8 +115,12 @@ export function RaffleForm({
        `restored` must be state rather than a ref: the save effect below runs in
        the same pass, and only a re-render makes the restored draft visible to
        it before it writes anything back. */
-    setDraft(readDraft(eventSlug));
+    const stored = readDraft(eventSlug);
+    setDraft(stored);
     setRestored(true);
+    // A visitor who already filled these in and then reloaded must not find
+    // their own answers hidden behind a collapsed section.
+    if (PROFILE_FIELDS.some((field) => stored[field] !== EMPTY_DRAFT[field])) setProfileOpen(true);
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [eventSlug]);
 
@@ -271,14 +287,51 @@ export function RaffleForm({
       }}
       className="space-y-8"
     >
-      <section className="space-y-4">
-        <div>
-          <h2 className="flex items-center gap-2 text-xl font-bold text-neutral-900">
+      {/*
+        Collapsed by default. Almost every visitor arrives by scanning a code at
+        a busy booth, and with these seven optional fields expanded the one
+        field they actually need sat more than a screen below the fold. The
+        section still comes first, so the offer is made before they commit, but
+        it costs one line instead of a screenful.
+      */}
+      <details
+        open={profileOpen}
+        onToggle={(event) => setProfileOpen(event.currentTarget.open)}
+        className="group space-y-4 rounded-xl border border-neutral-200 px-4 py-3 open:pb-5"
+      >
+        {/*
+          The heading is inside the summary rather than beside it: `summary`
+          takes either phrasing content or a single heading element, and this
+          way the section keeps the heading a screen reader can navigate to,
+          exactly as it had before it became collapsible.
+        */}
+        <summary className="-mx-4 -my-3 cursor-pointer list-none px-4 py-3 text-neutral-900 [&::-webkit-details-marker]:hidden">
+          <h2 className="flex items-center gap-2 text-[15px] font-bold">
             <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-[var(--brand-accent)]" />
-            {t.profileHeading}
+            {/* One text flow, so "(Optional)" wraps with the heading instead of
+                being pushed against the chevron on a narrow screen. */}
+            <span className="min-w-0 flex-1">
+              {t.profileHeading}{' '}
+              <span className="font-normal text-neutral-500">({t.profileOptional})</span>
+            </span>
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 20 20"
+              className="size-5 shrink-0 text-neutral-500 transition-transform group-open:rotate-180"
+            >
+              <path
+                d="M6 8l4 4 4-4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
           </h2>
-          <p className="mt-1 text-sm text-neutral-600">{t.profileNote}</p>
-        </div>
+        </summary>
+
+        <p className="text-sm text-neutral-600">{t.profileNote}</p>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label={t.firstName} id="first-name">
@@ -364,9 +417,9 @@ export function RaffleForm({
             />
           </Field>
         </div>
-      </section>
+      </details>
 
-      <section className="space-y-4 border-t border-neutral-200 pt-8">
+      <section className="space-y-4">
         <div>
           <h2 className="flex items-center gap-2 text-xl font-bold text-neutral-900">
             <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-[var(--brand-accent)]" />

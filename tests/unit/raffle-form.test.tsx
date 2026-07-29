@@ -64,8 +64,11 @@ describe('information hierarchy', () => {
     renderForm();
     const headings = screen.getAllByRole('heading').map((heading) => heading.textContent);
 
+    // The profile section is a disclosure now, but it keeps its heading so it
+    // is still reachable by heading navigation, and it announces that it can
+    // be skipped without being opened first.
     expect(headings).toEqual([
-      'Tell us a little about yourself',
+      'Tell us a little about yourself (Optional)',
       'Get your Lucky Draw number',
     ]);
   });
@@ -78,6 +81,33 @@ describe('information hierarchy', () => {
       const field = screen.getByLabelText(label);
       expect(numberHeading.compareDocumentPosition(field)).toBe(Node.DOCUMENT_POSITION_PRECEDING);
     }
+  });
+
+  it('starts with the optional fields collapsed, so the required one is reachable without scrolling', () => {
+    renderForm();
+
+    // The offer is still made first; it just costs one line rather than a
+    // screenful on the phone almost every visitor arrives with.
+    const section = screen.getByText('Tell us a little about yourself').closest('details');
+    expect(section).not.toBeNull();
+    expect(section).not.toHaveAttribute('open');
+  });
+
+  it('opens the optional fields when a restored draft has something in them', async () => {
+    const first = renderForm();
+    fireEvent.click(screen.getByText('Tell us a little about yourself'));
+    fireEvent.change(screen.getByLabelText(/First name/), { target: { value: 'Ada' } });
+    first.unmount();
+
+    renderForm();
+
+    // Hiding a visitor's own restored answers behind a closed section would
+    // read as having lost them.
+    await waitFor(() =>
+      expect(screen.getByText('Tell us a little about yourself').closest('details')).toHaveAttribute(
+        'open',
+      ),
+    );
   });
 
   it('collects a country and region but never a street address', () => {
@@ -227,7 +257,14 @@ describe('resend', () => {
     confirmInDialog('Send confirmation email');
     await screen.findByRole('heading', { name: 'Check your email' });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Send it again' }));
+    // Sending spends the captcha token, so the resend button stays disabled
+    // until Cloudflare hands back a fresh one — and a click on a disabled
+    // button does nothing at all. Waiting for it is what the submit helper
+    // above already does; without the same wait here the test passes alone and
+    // fails under the load of the full suite.
+    const resend = screen.getByRole('button', { name: 'Send it again' });
+    await waitFor(() => expect(resend).toBeEnabled());
+    fireEvent.click(resend);
     const dialog = await screen.findByRole('dialog');
     expect(dialog).toHaveTextContent('person@example.com');
     expect(fetch).toHaveBeenCalledTimes(1);

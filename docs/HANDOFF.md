@@ -149,10 +149,11 @@ specs: 5 public journey, 6 admin, 8 read-only production smoke.
    resubmitting that address. Bounded by the 5/day per-address limit, cannot
    yield a number, and is inherent to an email-keyed form that stores the
    profile before verification.
-9. **The visitor's form leads with the optional profile section**, so the only
-   required field is more than a screen down on a phone. Whether to reorder it
-   is a product tradeoff — entry completion against profile data volume — and
-   has not been decided.
+Resolved since: the visitor's form used to lead with seven expanded optional
+fields, putting the only required one 935px down an 812px viewport. The section
+is now a collapsed disclosure — still first, so the offer is made before the
+visitor commits, but the whole form now fits on one phone screen with no
+scrolling. It auto-expands when a restored draft has anything in it.
 
 ## Things that surprised previous sessions
 
