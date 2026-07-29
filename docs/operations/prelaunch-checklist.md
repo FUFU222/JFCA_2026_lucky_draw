@@ -1,10 +1,11 @@
 # Lucky Draw pre-launch checklist
 
-Set staging up first — see [staging.md](staging.md). It is the only place the
-load test and a full dry run can happen without sending real mail.
-
 Work top to bottom. Nothing below the QR line may be skipped: once a code is
 printed, the URL it points at cannot be changed.
+
+The dry run happens on production, not on staging — see section 7. Staging
+([staging.md](staging.md)) is now only for the load test, because it is the one
+thing that must not run against the real database.
 
 ## 1. Supabase project
 
@@ -159,7 +160,81 @@ be issued after the draw has begun. Test-mode entries are the one exception —
 they are exempt from both the schedule and this cut-off on purpose, so a
 rehearsal works before opening and after closing.
 
-## 7. Before the QR code is printed
+## 7. Rehearsing on production without touching the draw
+
+Two tools, for two different jobs. Neither can add a number to the real draw.
+
+**Test mode** — for repeated functional rehearsals, any time, including during
+the event. Covered in [on-site-runbook.md](on-site-runbook.md). It deliberately
+skips the captcha, the rate limits and the schedule, which is what makes it
+convenient — and also what it cannot prove.
+
+**A rehearsal campaign** — for one full-fidelity run before launch, where every
+gate test mode skips is live. This is a second campaign row in the production
+database. Nothing about the code changes; every counter, every rate-limit
+bucket and every dashboard and export query is already scoped by campaign, so a
+run here cannot reach `jfca-2026`. Verified by running one and confirming the
+real campaign's counter, entry count and rate-limit buckets were all untouched.
+
+```sql
+-- Stand it up. Open immediately, draw far enough out that the 30-minute
+-- cut-off is not in the way.
+insert into public.campaigns (slug, title, opens_at, draw_starts_at, status, terms_version)
+values (
+  'jfca-2026-rehearsal',
+  'JFCA 2026 rehearsal',
+  now() - interval '1 minute',
+  now() + interval '7 days',
+  'SCHEDULED',
+  'jfca-2026-rehearsal'
+);
+```
+
+- [ ] Walk the whole journey at
+      `https://luckydraw.livapon.com/jfca-2026-rehearsal` on a real phone, on
+      mobile data. **Use only addresses you control.** Real mail is sent, and
+      the campaign is deleted afterwards, which takes those receipt links with
+      it.
+- [ ] Confirm the captcha actually challenged you, the confirmation email
+      arrived from `info@chairman.jp` and not in spam, and the number page
+      rendered — none of which test mode can tell you.
+- [ ] Export it if you want the CSV path exercised too: the export route takes
+      a slug, so `/admin/entries/export?event=jfca-2026-rehearsal`. The
+      dashboard *page* is pinned to the real campaign, so rehearsal entries do
+      not appear in 概要 or 応募一覧 — look them up in Supabase.
+- [ ] Tear it down when the rehearsal is over:
+
+```sql
+-- Children first; the entry rows are what everything else hangs off.
+with doomed as (select id from public.raffle_entries
+                where campaign_id = (select id from public.campaigns where slug = 'jfca-2026-rehearsal'))
+delete from public.email_deliveries where entry_id in (select id from doomed);
+-- repeat for email_outbox and verification_tokens, then:
+delete from public.raffle_entries
+ where campaign_id = (select id from public.campaigns where slug = 'jfca-2026-rehearsal');
+delete from public.campaigns where slug = 'jfca-2026-rehearsal';
+```
+
+- [ ] **Prove the real campaign is still pristine.** Run this last, whatever
+      else happened, and do not print the QR code until it returns exactly
+      `10000`, `900000001`, `0`, `0`:
+
+```sql
+select c.next_number,
+       c.test_next_number,
+       count(e.id) filter (where not e.is_test) as real_entries,
+       count(e.id) filter (where e.is_test)     as test_entries
+from public.campaigns c
+left join public.raffle_entries e on e.campaign_id = c.id
+where c.slug = 'jfca-2026'
+group by c.next_number, c.test_next_number;
+```
+
+If it does not, something ran against the real campaign. Delete those entries
+and reset the counters before opening — a number issued to nobody still
+advances the sequence, so the first real visitor would not be 10000.
+
+## 8. Before the QR code is printed
 
 - [ ] `https://luckydraw.livapon.com/jfca-2026` resolves and its certificate is
       valid, checked from a Toronto network or an external Toronto probe.
@@ -196,7 +271,7 @@ rehearsal works before opening and after closing.
 - [ ] A CSV exported and opened in Excel with Japanese names intact.
 - [ ] `info@chairman.jp` reaches a monitored mailbox.
 
-## 8. Alerting
+## 9. Alerting
 
 - [ ] Vercel deployment and function failure notifications reach the operator.
 - [ ] Supabase project health alerts enabled.
