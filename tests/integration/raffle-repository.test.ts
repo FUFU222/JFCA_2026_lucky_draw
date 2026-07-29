@@ -73,7 +73,7 @@ async function createOpenCampaign() {
   return data as { id: string; slug: string };
 }
 
-function buildService(mailer: FakeMailer) {
+function buildService(mailer: FakeMailer, verifyOperatorSession?: () => Promise<boolean>) {
   return new RaffleService({
     repository: new SupabaseRaffleRepository(supabase),
     mailer,
@@ -81,6 +81,7 @@ function buildService(mailer: FakeMailer) {
     rateLimiter: new SupabaseRateLimiter(supabase),
     verificationTokenSecret: VERIFICATION_SECRET,
     receiptTokenSecret: RECEIPT_SECRET,
+    verifyOperatorSession,
   });
 }
 
@@ -170,6 +171,50 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
       .select('status')
       .eq('entry_id', (await entryId(campaign.id)) ?? '');
     expect(outbox).toEqual([{ status: 'SENT' }]);
+  });
+
+  it('resets a verified test entry so the same address can rehearse the whole journey again', async () => {
+    const campaign = await createOpenCampaign();
+    const mailer = new FakeMailer();
+    const service = buildService(mailer, async () => true);
+    const email = `rehearsal-${uniqueSuffix()}@example.com`;
+    const request = {
+      eventSlug: campaign.slug,
+      email,
+      termsConsent: true as const,
+      turnstileToken: '',
+      isTest: true,
+    };
+
+    await expect(service.requestVerification(request)).resolves.toEqual({ accepted: true });
+    const firstConfirmation = await service.confirmVerification({
+      eventSlug: campaign.slug,
+      token: mailer.verification[0].token,
+    });
+    expect(firstConfirmation?.number).toBe(BigInt(900_000_001));
+
+    // The operator rehearses again with the same address, exactly as they
+    // would by resubmitting the public form a second time.
+    await expect(service.requestVerification(request)).resolves.toEqual({ accepted: true });
+    const { data: reset } = await supabase
+      .from('raffle_entries')
+      .select('state, number, verified_at, receipt_token_hash, is_test')
+      .eq('campaign_id', campaign.id)
+      .single();
+    expect(reset).toMatchObject({
+      state: 'PENDING',
+      number: null,
+      verified_at: null,
+      receipt_token_hash: null,
+      is_test: true,
+    });
+    expect(mailer.verification).toHaveLength(2);
+
+    const secondConfirmation = await service.confirmVerification({
+      eventSlug: campaign.slug,
+      token: mailer.verification[1].token,
+    });
+    expect(secondConfirmation?.number).toBe(BigInt(900_000_002));
   });
 
   it('matches an address exactly, so a wildcard character cannot reach another entry', async () => {

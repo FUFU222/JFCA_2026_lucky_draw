@@ -71,6 +71,14 @@ export interface RaffleRepository {
   createPendingEntry(input: PendingEntryInput): Promise<RaffleEntry>;
   /** Resolves to null when the entry was verified in the meantime. */
   updatePendingEntry(entryId: string, changes: Partial<RaffleEntry>): Promise<RaffleEntry | null>;
+  /**
+   * Puts a verified entry back to PENDING so the same address can rehearse
+   * the whole journey again. Guarded by `is_test = true` in the query itself
+   * — not only in the caller's logic — so this can never reopen a real
+   * visitor's issued number even if that check were ever missed upstream.
+   * Resolves to null if the entry was not (or no longer) a test entry.
+   */
+  resetTestEntry(entryId: string): Promise<RaffleEntry | null>;
   getLatestVerificationToken(entryId: string): Promise<VerificationToken | null>;
   createVerificationToken(token: VerificationToken): Promise<VerificationToken>;
   /**
@@ -199,9 +207,23 @@ export class RaffleService {
       campaign.id,
       request.email,
     );
-    // A verified address keeps its number and its profile untouched, and the
-    // response is identical to a first submission so nobody can probe it.
-    if (existing?.state === 'VERIFIED') return { accepted: true };
+
+    let workingEntry = existing;
+    if (existing?.state === 'VERIFIED') {
+      // A verified address normally keeps its number and its profile
+      // untouched, and the response is identical to a first submission so
+      // nobody can probe it. A verified *test* entry, resubmitted from a
+      // verified test-mode session, is the one exception: it is reset back
+      // to PENDING so the operator can run the whole journey again with the
+      // same address, since asking them to burn a fresh one every rehearsal
+      // is not realistic. A real entry is never reset, even when the request
+      // claims test mode.
+      if (!isTest || !existing.is_test) return { accepted: true };
+      workingEntry = await this.dependencies.repository.resetTestEntry(existing.id);
+      // Lost a race with something else touching this entry — treat it the
+      // same as any other already-verified address.
+      if (!workingEntry) return { accepted: true };
+    }
 
     const profile = {
       first_name: request.firstName,
@@ -213,12 +235,12 @@ export class RaffleService {
       region: request.region,
     };
 
-    const entry = existing
-      ? await this.dependencies.repository.updatePendingEntry(existing.id, {
+    const entry = workingEntry
+      ? await this.dependencies.repository.updatePendingEntry(workingEntry.id, {
           locale: 'en',
           terms_version: campaign.terms_version,
           terms_consented_at: this.now().toISOString(),
-          is_test: isTest || existing.is_test,
+          is_test: isTest || workingEntry.is_test,
           // Only fields the visitor supplied this time are written, so a second
           // submission with a blank form never erases an earlier profile.
           ...definedOnly(profile),

@@ -84,6 +84,14 @@ class MemoryRepository implements RaffleRepository {
     return entry;
   }
 
+  async resetTestEntry(entryId: string) {
+    const entry = this.entries.find((candidate) => candidate.id === entryId);
+    // Mirrors the `is_test = true` guard on the real update.
+    if (!entry || !entry.is_test) return null;
+    Object.assign(entry, { state: 'PENDING', number: null, verified_at: null, receipt_token_hash: null });
+    return entry;
+  }
+
   async getLatestVerificationToken(entryId: string) {
     return this.tokens.filter((token) => token.entryId === entryId).at(-1) ?? null;
   }
@@ -495,6 +503,48 @@ describe('RaffleService test mode', () => {
       service.requestVerification({ ...validRequest, turnstileToken: undefined, isTest: true }),
     ).resolves.toEqual({ accepted: false, reason: 'invalid' });
     expect(repository.entries).toHaveLength(0);
+  });
+
+  it('resets a verified test entry back to pending on resubmission, so the same address can rehearse again', async () => {
+    const { service, repository, mailer } = buildService({ verifyOperatorSession: async () => true });
+    await service.requestVerification({ ...validRequest, isTest: true });
+    const entry = repository.entries[0];
+    entry.state = 'VERIFIED';
+    entry.number = 900_000_001;
+    entry.verified_at = now.toISOString();
+    entry.receipt_token_hash = 'previous-receipt-hash';
+    // Mirrors what `confirm_raffle_verification` does to the token on a real
+    // confirmation, so the reset path is exercised the way it runs in
+    // production rather than against a token the RPC would already have spent.
+    repository.tokens[0].consumedAt = now.toISOString();
+
+    const result = await service.requestVerification({ ...validRequest, isTest: true });
+
+    expect(result).toEqual({ accepted: true });
+    expect(repository.entries).toHaveLength(1);
+    expect(repository.entries[0]).toMatchObject({
+      state: 'PENDING',
+      number: null,
+      verified_at: null,
+      receipt_token_hash: null,
+      is_test: true,
+    });
+    expect(mailer.verification).toHaveLength(2);
+  });
+
+  it('never resets a real verified entry, even when the resubmission claims test mode', async () => {
+    const { service, repository, mailer } = buildService({ verifyOperatorSession: async () => true });
+    await service.requestVerification(validRequest);
+    const entry = repository.entries[0];
+    entry.state = 'VERIFIED';
+    entry.number = 10_000;
+    entry.verified_at = now.toISOString();
+
+    const result = await service.requestVerification({ ...validRequest, isTest: true });
+
+    expect(result).toEqual({ accepted: true });
+    expect(repository.entries).toMatchObject([{ state: 'VERIFIED', number: 10_000, is_test: false }]);
+    expect(mailer.verification).toHaveLength(1);
   });
 });
 

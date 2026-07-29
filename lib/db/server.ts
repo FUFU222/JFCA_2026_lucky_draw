@@ -115,6 +115,21 @@ export class SupabaseRaffleRepository implements RaffleRepository {
     return (data as RaffleEntry | null) ?? null;
   }
 
+  async resetTestEntry(entryId: string): Promise<RaffleEntry | null> {
+    // `is_test = true` is part of the query, not just something the caller
+    // checked first — a real visitor's issued number can never be reopened
+    // through this path, regardless of what the calling code believes.
+    const { data, error } = await this.client
+      .from('raffle_entries')
+      .update({ state: 'PENDING', number: null, verified_at: null, receipt_token_hash: null })
+      .eq('id', entryId)
+      .eq('is_test', true)
+      .select()
+      .maybeSingle();
+    if (error) throw error;
+    return (data as RaffleEntry | null) ?? null;
+  }
+
   async getLatestVerificationToken(entryId: string): Promise<VerificationToken | null> {
     const { data, error } = await this.client
       .from('verification_tokens')
