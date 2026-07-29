@@ -83,8 +83,14 @@ export function ConfirmationDialog({
     }
   };
 
+  // Centred at every width. This used to sit against the bottom edge on a
+  // phone, in the bottom-sheet style, which put the question down in the
+  // corner of the screen and left the decision reading as an afterthought
+  // rather than as the thing being asked. The padding keeps the panel off the
+  // screen edges, and it scrolls rather than overflowing when a short screen —
+  // a phone held sideways — cannot fit it.
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div
         data-testid="confirmation-dialog-backdrop"
         className="fade-in absolute inset-0 bg-neutral-950/50"
@@ -96,7 +102,7 @@ export function ConfirmationDialog({
         aria-modal="true"
         aria-labelledby={titleId}
         onKeyDown={handleKeyDown}
-        className="fade-in-up relative w-full max-w-md rounded-t-2xl bg-white p-6 shadow-xl sm:rounded-2xl"
+        className="fade-in-up relative max-h-full w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-xl"
       >
         <h2 id={titleId} className="text-lg font-bold text-neutral-900">
           {title}
