@@ -223,7 +223,7 @@ pnpm email:preview
 
 ## Going live
 
-Three documents own the deployment:
+These documents own the deployment:
 
 - [docs/operations/prelaunch-checklist.md](docs/operations/prelaunch-checklist.md)
   — Supabase, Resend, Turnstile, Vercel, the legal wording, the event schedule,
@@ -233,6 +233,12 @@ Three documents own the deployment:
 - [docs/operations/on-site-runbook.md](docs/operations/on-site-runbook.md) —
   what the operator does at the venue, including the one thing most likely to
   surprise them: a shared venue network makes many visitors look like one IP.
+- [docs/operations/monitoring.md](docs/operations/monitoring.md) — the error log,
+  the alert webhook, and the external monitor on `/api/health`. Three of its four
+  layers are off until somebody switches them on.
+- [docs/operations/readiness-gaps.md](docs/operations/readiness-gaps.md) — what
+  is still unverified or missing before this can be called ready, with a deadline
+  against each item.
 
 The schedule is data, not code. Opening and draw times are set on the campaign
 row; registration closes automatically 30 minutes before the draw starts. No
@@ -273,6 +279,8 @@ mistake is a failed deploy rather than a silent one.
 | `MAIL_DELIVERY_MODE` | no | `send` (default) or `log` |
 | `RAFFLE_IP_REQUEST_LIMIT` | no | Writes per IP per 24h, default 500 — the venue-network lever |
 | `RAFFLE_EMAIL_REQUEST_LIMIT` | no | Writes per address per 24h, default 5 |
+| `ALERT_WEBHOOK_URL` | no | Slack/Discord/Google Chat incoming webhook for server errors |
+| `OUTBOX_BACKLOG_THRESHOLD` | no | Queue depth `/api/health` calls `degraded`, default 50 |
 | `SMOKE_BASE_URL` / `SMOKE_EVENT_SLUG` | no | Point the smoke suite at a deployed origin |
 
 ## Token secrets
