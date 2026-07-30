@@ -60,6 +60,18 @@ export function TurnstileWidget({
 
       widgetIdRef.current = globalThis.turnstile.render(container, {
         sitekey: siteKey,
+        // Pinned, because Turnstile otherwise follows the device language, and
+        // the visitor's pages are English only by decision — the Japanese copy
+        // and the language switcher were removed, and `0007_english_only.sql`
+        // constrains the stored locale to 'en'. On a Japanese phone this
+        // widget was the one thing on the page still speaking Japanese.
+        language: 'en',
+        // Normal is a fixed 300px, which is wider than the inside of the
+        // confirmation dialog on a 375px phone and pushed the panel off the
+        // screen. Flexible fills its container instead — still no narrower
+        // than 300px, so the container has to be at least that, which is what
+        // the dialog's mobile padding is set for.
+        size: 'flexible',
         callback: (token: string) => callbacks.current.onToken(token),
         'error-callback': () => callbacks.current.onError(),
         // A lapsed token must invalidate the send action, not sit there stale.
@@ -113,8 +125,16 @@ export function TurnstileWidget({
 
   // A spent token cannot be verified twice, so every submission asks Cloudflare
   // for a new one.
+  //
+  // Only on a real change, never on the mount pass. A widget mounted while the
+  // round is already above zero — which is every widget rendered after the
+  // first submission, including the one in the resend dialog — used to render
+  // a challenge and then immediately reset it, spending two for one and
+  // blanking the token it had just been handed.
+  const seenResetKey = useRef(resetKey);
   useEffect(() => {
-    if (resetKey === 0 || widgetIdRef.current === null) return;
+    if (resetKey === seenResetKey.current || widgetIdRef.current === null) return;
+    seenResetKey.current = resetKey;
     callbacks.current.onToken(null);
     try {
       globalThis.turnstile?.reset?.(widgetIdRef.current);

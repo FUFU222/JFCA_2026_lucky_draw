@@ -227,32 +227,29 @@ export function RaffleForm({
         {resendNote && <p className="text-sm text-neutral-700">{resendNote}</p>}
         {error && <p className="text-sm font-medium text-[#c8102e]">{error}</p>}
 
-        {!isTestMode && (
-          <div>
-            <TurnstileWidget
-              siteKey={turnstileSiteKey}
-              resetKey={captchaRound}
-              onToken={(token) => {
-                setCaptchaToken(token);
-                if (token) setCaptchaFailed(false);
-              }}
-              onError={() => {
-                setCaptchaToken(null);
-                setCaptchaFailed(true);
-              }}
-            />
-            {captchaFailed && (
-              <p className="mt-2 text-sm text-neutral-600" role="status">
-                {t.captchaFailed}
-              </p>
-            )}
-          </div>
-        )}
-
+        {/*
+          The captcha lives in the dialog below, not here. It has only ever
+          existed to hand a token to this button, and a resend is rare — a
+          visitor whose mail went to spam — so a permanently visible challenge
+          box sat on the screen everybody sees to serve the few who need it.
+          It cannot be dropped altogether: a resend consumes the shared per-IP
+          allowance, and at a festival hundreds of visitors are behind one
+          address, so an uncaptcha'd resend would let one script exhaust the
+          venue's budget and lock all of them out.
+        */}
         <button
           type="button"
-          disabled={(!isTestMode && !captchaToken) || status === 'sending'}
-          onClick={() => setDialog('resend')}
+          disabled={status === 'sending'}
+          onClick={() => {
+            // A fresh challenge every time the dialog opens. A token left over
+            // from a cancelled attempt is spendable for a few minutes and then
+            // silently is not, which would surface as a failure the visitor
+            // did nothing to cause.
+            setCaptchaToken(null);
+            setCaptchaFailed(false);
+            setCaptchaRound((round) => round + 1);
+            setDialog('resend');
+          }}
           className="min-h-12 w-full rounded-lg border border-neutral-300 px-5 text-base font-semibold text-neutral-800 transition-colors hover:border-neutral-400 disabled:opacity-40"
         >
           <span className="inline-flex items-center justify-center gap-2">
@@ -269,9 +266,33 @@ export function RaffleForm({
           onCancel={() => setDialog('none')}
           onConfirm={resendEntry}
           tone="brand"
+          confirmDisabled={!isTestMode && !captchaToken}
         >
           <p className="font-semibold break-all text-neutral-900">{draft.email.trim()}</p>
           <p>{submitted.resendDialogHint}</p>
+          {/* The wrapper scrolls rather than widening the panel: below a
+              372px screen even the minimum-width widget does not fit, and a
+              challenge that overflows takes the buttons off the screen with
+              it. */}
+          {!isTestMode && (
+            <div className="overflow-x-auto">
+              <TurnstileWidget
+                siteKey={turnstileSiteKey}
+                resetKey={captchaRound}
+                onToken={(token) => {
+                  setCaptchaToken(token);
+                  if (token) setCaptchaFailed(false);
+                }}
+                onError={() => {
+                  setCaptchaToken(null);
+                  setCaptchaFailed(true);
+                }}
+              />
+              <p className="mt-2 text-sm text-neutral-600" role="status">
+                {captchaFailed ? t.captchaFailed : !captchaToken ? t.captchaPending : ''}
+              </p>
+            </div>
+          )}
         </ConfirmationDialog>
         </section>
       </>

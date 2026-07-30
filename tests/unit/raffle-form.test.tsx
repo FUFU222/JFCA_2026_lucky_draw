@@ -6,20 +6,40 @@ import { countryOptions } from '../../lib/i18n/countries';
 
 const CAPTCHA_TOKEN = 'turnstile-test-token';
 
-function stubTurnstile({ solve = true }: { solve?: boolean } = {}) {
+/**
+ * `solveFirst` is how many renders hand back a token before the rest fail. The
+ * captcha is rendered twice in a resend — once for the entry, once inside the
+ * resend dialog — so failing only the second is what proves the dialog waits
+ * on its own challenge rather than on a token left over from the entry.
+ */
+function stubTurnstile({
+  solve = true,
+  solveFirst = Number.POSITIVE_INFINITY,
+}: { solve?: boolean; solveFirst?: number } = {}) {
   let issue: ((token: string) => void) | null = null;
+  let fail: (() => void) | null = null;
+  let attempts = 0;
+
+  // Render and reset both run a challenge, so both go through here. Counting
+  // only renders would let a reset hand back a token the render was set up to
+  // refuse, which is how the first version of this stub quietly disagreed with
+  // itself.
+  const attempt = () => {
+    attempts += 1;
+    if (solve && attempts <= solveFirst) issue?.(CAPTCHA_TOKEN);
+    else fail?.();
+  };
+
   globalThis.turnstile = {
     render: (_element, options) => {
       issue = options.callback as (token: string) => void;
-      if (solve) issue(CAPTCHA_TOKEN);
-      else (options['error-callback'] as () => void)();
+      fail = options['error-callback'] as () => void;
+      attempt();
       return 'widget-1';
     },
     // Cloudflare hands back a new token after a reset; the form depends on it,
     // because a spent one cannot be verified twice.
-    reset: () => {
-      if (solve) issue?.(CAPTCHA_TOKEN);
-    },
+    reset: attempt,
   };
 }
 
@@ -310,23 +330,50 @@ describe('resend', () => {
     confirmInDialog('Send email');
     await screen.findByRole('heading', { name: 'Check your email' });
 
-    // Sending spends the captcha token, so the resend button stays disabled
-    // until Cloudflare hands back a fresh one — and a click on a disabled
-    // button does nothing at all. Waiting for it is what the submit helper
-    // above already does; without the same wait here the test passes alone and
-    // fails under the load of the full suite.
+    // Nothing to wait on any more: the button only opens the dialog, and the
+    // challenge that used to gate it has moved inside. The acknowledgement
+    // screen everybody sees carries no captcha at all.
+    expect(screen.queryByTestId('turnstile-widget')).not.toBeInTheDocument();
+
     const resend = screen.getByRole('button', { name: 'Send it again' });
-    await waitFor(() => expect(resend).toBeEnabled());
+    expect(resend).toBeEnabled();
     fireEvent.click(resend);
     const dialog = await screen.findByRole('dialog');
     expect(dialog).toHaveTextContent('person@example.com');
+    expect(within(dialog).getByTestId('turnstile-widget')).toBeInTheDocument();
     expect(fetch).toHaveBeenCalledTimes(1);
 
+    await waitFor(() =>
+      expect(within(dialog).getByRole('button', { name: 'Send again' })).toBeEnabled(),
+    );
     confirmInDialog('Send again');
 
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
     expect((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[1][0]).toBe(
       '/api/campaigns/jfca-2026/entries/resend',
     );
+  });
+
+  it('will not resend on a challenge that failed, and still lets the visitor out', async () => {
+    stubTurnstile({ solveFirst: 1 });
+    renderForm();
+    await fillAndOpenDialog();
+    confirmInDialog('Send email');
+    await screen.findByRole('heading', { name: 'Check your email' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send it again' }));
+    const dialog = await screen.findByRole('dialog');
+
+    // No token, so nothing can be sent — but cancel has to stay live. Using
+    // the dialog's `busy` state here would have disabled the way out too, and
+    // a failed challenge is exactly when somebody needs it.
+    await waitFor(() => expect(dialog).toHaveTextContent(/check did not pass/i));
+    expect(within(dialog).getByRole('button', { name: 'Send again' })).toBeDisabled();
+    const cancel = within(dialog).getByRole('button', { name: 'Go back' });
+    expect(cancel).toBeEnabled();
+
+    fireEvent.click(cancel);
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 });

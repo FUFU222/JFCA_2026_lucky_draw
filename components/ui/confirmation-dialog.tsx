@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 import { Spinner } from './spinner';
 
@@ -13,6 +14,13 @@ export interface ConfirmationDialogProps {
   onCancel: () => void;
   busy?: boolean;
   busyLabel?: string;
+  /**
+   * Disables the action alone, leaving cancel, Escape and the backdrop live.
+   * `busy` would disable those too, which is right while a request is in
+   * flight and wrong while the dialog is waiting on something that may never
+   * arrive — a captcha that fails has to leave a way out.
+   */
+  confirmDisabled?: boolean;
   children?: ReactNode;
   /**
    * `brand` is for the public entry flow, where the confirm button is the
@@ -37,18 +45,33 @@ export function ConfirmationDialog({
   onCancel,
   busy = false,
   busyLabel,
+  confirmDisabled = false,
   children,
   tone = 'neutral',
 }: ConfirmationDialogProps) {
   const titleId = useId();
   const cancelRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
+  // Portalled, so it is rendered on the client only. The server has no
+  // document to portal into, and matching that on the first client render is
+  // what keeps React from throwing the tree away.
+  const [mounted, setMounted] = useState(false);
+  /* eslint-disable-next-line react-hooks/set-state-in-effect -- adopting
+     client-only state on mount is exactly the case this rule asks you to make
+     deliberate, and it is the same pattern the entry form uses to restore a
+     draft. There is no document to portal into on the server, and rendering
+     the portal on the first client pass instead would be the hydration
+     mismatch this flag exists to avoid. */
+  useEffect(() => setMounted(true), []);
 
+  // `mounted` belongs in here as well as in the render: on the first pass the
+  // portal has not been created yet, so the button this wants to focus is not
+  // in the document, and focus would silently stay on the page behind.
   useEffect(() => {
-    if (open) cancelRef.current?.focus();
-  }, [open]);
+    if (open && mounted) cancelRef.current?.focus();
+  }, [open, mounted]);
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
   const focusable = () =>
     Array.from(
@@ -89,7 +112,18 @@ export function ConfirmationDialog({
   // rather than as the thing being asked. The padding keeps the panel off the
   // screen edges, and it scrolls rather than overflowing when a short screen —
   // a phone held sideways — cannot fit it.
-  return (
+  // Into `document.body`, never in place.
+  //
+  // `position: fixed` is only fixed to the viewport while no ancestor has a
+  // transform, and the screens this opens from animate in — `fade-in-up`
+  // leaves an identity transform on its section, which is enough to make that
+  // section the containing block. The backdrop then covered the section
+  // instead of the page and the panel was centred inside it: measured at 375
+  // wide, the overlay came out 335 by 257 rather than 375 by 812, which left
+  // the panel 303 wide with its buttons below the fold. A portal takes the
+  // dialog out of reach of any ancestor's transform, overflow or stacking
+  // context, so it cannot come back the next time something is animated.
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div
         data-testid="confirmation-dialog-backdrop"
@@ -102,7 +136,11 @@ export function ConfirmationDialog({
         aria-modal="true"
         aria-labelledby={titleId}
         onKeyDown={handleKeyDown}
-        className="fade-in-up relative max-h-full w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-xl"
+        // `p-5` on a phone rather than `p-6`: with the page's own `p-4`
+        // outside it, 24px of panel padding left 295px inside on a 375px
+        // screen, and a Turnstile widget will not go below 300px. Five pixels
+        // were enough to push the whole panel off the edge.
+        className="fade-in-up relative max-h-full w-full max-w-md overflow-y-auto rounded-2xl bg-white p-5 shadow-xl sm:p-6"
       >
         <h2 id={titleId} className="text-lg font-bold text-neutral-900">
           {title}
@@ -130,7 +168,7 @@ export function ConfirmationDialog({
           <button
             type="button"
             onClick={onConfirm}
-            disabled={busy}
+            disabled={busy || confirmDisabled}
             className={`min-h-12 flex-1 rounded-lg px-5 py-3 text-base font-semibold leading-snug text-white disabled:opacity-60 ${
               tone === 'brand'
                 ? 'bg-[var(--brand-accent)] hover:bg-[var(--brand-accent-hover)]'
@@ -144,6 +182,7 @@ export function ConfirmationDialog({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
