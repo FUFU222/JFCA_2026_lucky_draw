@@ -193,31 +193,37 @@ Not worth changing before the event. Worth doing before this code is reused.
 Recorded rather than fixed. Each one is a decision, and the reason is the part
 worth keeping.
 
-| # | Risk | Why it is accepted |
-| --- | --- | --- |
-| R1 | An unverified entry's marketing consent can be overwritten by anyone resubmitting that address, leaving a consent timestamp that is evidence of nothing | Before verification nobody owns the row, and the person confirming cannot be told apart from the person who ticked the box. The real fix issues a fresh token whenever consent changes. Bounded by the 5/day per-address limit and it cannot yield a number. Fix before this code mails a list |
-| R2 | A submit race can leave two live verification links for one entry; the second returns a 500 for 24 hours instead of "link cannot be used" | The issued number stays correct. The fix is in SQL and the race needs two requests for a brand-new address to interleave within milliseconds |
-| R3 | The per-IP limit trusts `x-real-ip` / `x-forwarded-for` | Unverified rather than accepted — **confirm Vercel overwrites both on ingress**. If it does not, the limit is bypassable. This one should be checked before D |
-| R4 | A Resend send is raced against a 10-second timeout rather than cancelled, so a retry can duplicate a message | Duplicates are preferred to losses |
-| R5 | A resend after the link expired sends nothing, and the acknowledgement page does not say "submit the form again" | The service behaviour is intentional; the wording gap is real and small |
+| # | Issue | Risk | Why it is accepted |
+| --- | --- | --- | --- |
+| R1 | [#1](https://github.com/FUFU222/JFCA_2026_lucky_draw/issues/1) | An unverified entry's marketing consent can be overwritten by anyone resubmitting that address, leaving a consent timestamp that is evidence of nothing | Before verification nobody owns the row, and the person confirming cannot be told apart from the person who ticked the box. The real fix issues a fresh token whenever consent changes. Bounded by the 5/day per-address limit and it cannot yield a number. Fix before this code mails a list |
+| R2 | [#2](https://github.com/FUFU222/JFCA_2026_lucky_draw/issues/2) | A submit race can leave two live verification links for one entry; the second returns a 500 for 24 hours instead of "link cannot be used" | The issued number stays correct. The fix is in SQL and the race needs two requests for a brand-new address to interleave within milliseconds |
+| R3 | [#3](https://github.com/FUFU222/JFCA_2026_lucky_draw/issues/3) | The per-IP limit trusts `x-real-ip` / `x-forwarded-for` | Unverified rather than accepted — **confirm Vercel overwrites both on ingress**. If it does not, the limit is bypassable. This one should be checked before D |
+| R4 | [#4](https://github.com/FUFU222/JFCA_2026_lucky_draw/issues/4) | A Resend send is raced against a 10-second timeout rather than cancelled, so a retry can duplicate a message | Duplicates are preferred to losses |
+| R5 | [#5](https://github.com/FUFU222/JFCA_2026_lucky_draw/issues/5) | A resend after the link expired sends nothing, and the acknowledgement page does not say "submit the form again" | The service behaviour is intentional; the wording gap is real and small |
 
 These came from [HANDOFF.md](../HANDOFF.md), which is where they were first
-written down. They belong in an issue tracker rather than a prose document, so
-each has a GitHub issue — that is what makes "we accepted this" survive the
-person who accepted it.
+written down. They belong in an issue tracker rather than a prose document,
+because prose does not survive the person who wrote it — so each now has an
+issue, and the issue carries the reason it is accepted rather than only what it
+is.
 
 ## Cleanups
 
-- **C1. The CSV export can truncate silently (S2, worth fixing before D).**
+- **C1. The CSV export can truncate silently
+  ([#6](https://github.com/FUFU222/JFCA_2026_lucky_draw/issues/6), S2, worth
+  fixing before D).**
   [app/admin/entries/export/route.ts](../../app/admin/entries/export/route.ts)
   streams the file, so a failure part-way through arrives as a 200 with a short
   file. The row count is already known and recorded in the audit log but is never
   compared against what was written. The operator cannot tell a complete export
   from a truncated one, and the export is the draw pool.
-- **C2. `hasCronSecret` exists twice.**
+- **C2. `hasCronSecret` exists twice
+  ([#7](https://github.com/FUFU222/JFCA_2026_lucky_draw/issues/7)).**
   [lib/security/cron-auth.ts](../../lib/security/cron-auth.ts) and the copy inside
   the outbox route. Deliberately not merged this close to the event; merge after.
-- **C3. No error-grouping dashboard.** `@sentry/nextjs` could not be installed on
+- **C3. No error-grouping dashboard
+  ([#8](https://github.com/FUFU222/JFCA_2026_lucky_draw/issues/8)).**
+  `@sentry/nextjs` could not be installed on
   2026-07-30 — it pulls `webpack@5.109.2`, which depends on an unpublished
   `enhanced-resolve@^5.24.4`. Unblocking it means pinning webpack through a pnpm
   override. Revisit after the event; see the closing section of
