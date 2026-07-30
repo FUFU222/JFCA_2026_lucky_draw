@@ -11,13 +11,13 @@ discovered by surprise.
 
 ## How to read this
 
-- **D** is the day of the event. **It is not recorded anywhere in this
-  repository** — the only date in the documents is an illustrative
-  `2026-08-15 17:00:00-04` inside an example `update` statement in
-  [prelaunch-checklist.md](prelaunch-checklist.md) §6. Confirm the real date and
-  write it here first; every deadline below is relative to it.
+- **D is 2026-08-15**, with intake closing at **18:00 Toronto** (22:00 UTC).
+  Confirmed 2026-07-30, which is D-16. Every deadline below is relative to it.
 
-  > D = ______ (fill this in)
+  The schedule is still run by hand — `opens_at` and `draw_starts_at` stay
+  unset, and 受付を終了 at 18:00 is what ends the pool. The date being written
+  down here does not put it in the database; see
+  [prelaunch-checklist.md](prelaunch-checklist.md) §6.
 
 - **Severity.** S1 stops the event or loses data. S2 degrades the visitor's
   experience or the operator's ability to run it. S3 matters afterwards, or the
@@ -49,11 +49,18 @@ forming. A 429 is not handled specially anywhere — the message falls to
 `email_outbox` and waits for a worker whose real interval is about 88 minutes,
 and the visitor's own **Send it again** hits the same ceiling.
 
-Downgraded from S1 on 2026-07-30. Dropping the receipt email halves the volume
-and takes the peak to 3.6–4.8/s, inside the current limit — see
+Downgraded from S1 on 2026-07-30, and the reason has since shipped: `0010`
+removed the receipt email, which halves the volume and takes the peak to
+3.6–4.8/s — inside the current limit, with about twice the headroom. See
 [the plan](../superpowers/plans/2026-07-30-receipt-email-removal.md). The
-request below is then insurance rather than a blocker. **Send it either way**:
-it costs nothing and the turnaround is somebody else's.
+request below is now insurance rather than a blocker. **Send it either way**:
+it costs nothing and the turnaround is somebody else's. The one remaining
+message is also the more critical of the two, since a 429 on it stops the
+journey rather than delaying a copy.
+
+The figures above describe the two-email world and are left as written, because
+the plan and the ceiling they measure against have not changed. Against 30,000
+messages the allowance is now comfortable rather than exceeded.
 
 - [ ] Ask Resend support for 50/s. **Send the request on the earliest possible
       day**; it is the one item here with a third party's response time in it.

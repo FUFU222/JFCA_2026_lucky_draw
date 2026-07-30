@@ -1,6 +1,11 @@
 # Plan — stop sending the receipt email
 
-Written 2026-07-30, for review before implementation. Not yet decided.
+Written 2026-07-30. **Implemented the same day**, with one correction the plan
+did not see coming — see [What this plan got wrong](#what-this-plan-got-wrong).
+
+Event date confirmed while this was being written: **2026-08-15, intake closing
+18:00 Toronto**. That is D-16, which is what made this the last feature change
+before the freeze rather than a post-event idea.
 
 ## Why this is possible now, and was not yesterday
 
@@ -137,6 +142,30 @@ Add: confirming issues a number and sends **no** second message.
   is a new public write endpoint two weeks before the event, with its own abuse
   surface (a receipt URL is a bearer token; a send button behind one is a mail
   bomb without a limiter). Post-event idea.
+
+## What this plan got wrong
+
+It said the change was one call site and some copy, and that no SQL was
+involved. That was wrong, and the way it was wrong would have shipped a
+half-change that looked complete.
+
+**`confirm_raffle_verification` arms the receipt itself.** The function inserts
+the `RECEIPT` outbox row inside the same transaction that issues the number, at
+three separate points — the fresh path, the already-verified path, and the
+repeat-confirmation path. Removing only the inline send would have left every
+confirmation arming a job that the retry worker then picked up and delivered
+about ninety minutes later. Same mail volume, same rate-limit ceiling, and a
+receipt arriving long after the visitor left the booth: worse than either
+option on the table.
+
+`0010_no_receipt_email.sql` is `0009`'s definition with those nine lines
+removed. It was generated from that file rather than retyped, and the result
+diffed against the original to prove nothing else moved — this is the function
+that guarantees two simultaneous confirmations of one link return one number,
+and it is not a place to trust a careful copy-paste.
+
+The plan's other claim held: nothing downstream was touched, so a receipt row
+armed before the change can still be settled by the worker.
 
 ## Risks
 

@@ -177,15 +177,22 @@ pnpm audit --audit-level high
 
 ## Transactional email
 
-Both messages are React Email templates under `emails/`, rendered to HTML and a
-plain-text alternative by `lib/email/templates.ts`. The sender is
-`LIVAPON <info@chairman.jp>`.
+**One message is sent: the confirmation link.** It is a React Email template
+under `emails/`, rendered to HTML and a plain-text alternative by
+`lib/email/templates.ts`. The sender is `LIVAPON <info@chairman.jp>`.
+
+The receipt email was removed in `0010`. Once a number has been issued, the
+confirmation link the visitor is already holding returns to it for good — see
+`issuedReceiptToken` — so a second message was a duplicate of a copy they had,
+at twice the volume on the day. The `RECEIPT` kind, its template and the
+worker's handling of it are all still here, because rows armed before that
+change still have to be able to settle.
 
 Delivery is inline first and durable second. A visitor standing at the venue
 gets their verification link immediately; if the provider refuses it, the
 message is armed in `email_outbox` and `/api/internal/email-outbox` retries it.
-The retry worker rebuilds the permanent receipt link from the stored hash, so
-nothing has to keep a bearer token around to make a retry possible.
+The retry worker rebuilds a link from the stored hash, so nothing has to keep a
+bearer token around to make a retry possible.
 
 - `MAIL_DELIVERY_MODE=send` — deliver through Resend.
 - `MAIL_DELIVERY_MODE=log` — render the real template and record a successful
