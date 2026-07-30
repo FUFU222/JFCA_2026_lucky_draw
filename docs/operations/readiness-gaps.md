@@ -32,26 +32,46 @@ its own items; this one covers what that gate does not ask about.
 
 ## Blockers — must be true before the QR code is printed
 
-### B1. The Resend API rate limit is still the default (S1, by D-7)
+### B1. The Resend API rate limit is still the default (S2, by D-7)
 
 The plan is settled: Pro was taken on 2026-07-29, the quota is soft, and going
 over it costs cents rather than stopping the event. That work is done and
 [prelaunch-checklist.md](prelaunch-checklist.md) §2 now describes it correctly.
 
 **The rate limit is the part that is not done, and it is the opposite kind of
-problem.** The default is 10 requests per second per team, it cannot be changed
-from the dashboard, and it needs a human at Resend support to raise. Both
-messages are sent inline as visitors arrive: a seven-hour day at 30,000 entrants
-averages ~2.4/s, and festival arrivals cluster three to four times over, which
-puts the booth at the ceiling exactly when a queue is forming. A 429 is not
-handled specially anywhere — the message falls to `email_outbox` and waits for a
-worker whose real interval is about 88 minutes, and the visitor's own **Send it
-again** hits the same ceiling.
+problem.** Confirmed from Settings → Usage on 2026-07-30: team `chairman`, Pro,
+**rate limit 10 req/s**, monthly 27 / 50,000 renewing Aug 28, daily limit
+unlimited. It cannot be changed from the dashboard and needs a human at Resend
+support to raise. Both messages are sent inline as visitors arrive: a seven-hour
+day at 30,000 entrants averages ~2.4/s, and festival arrivals cluster three to
+four times over, which puts the booth at the ceiling exactly when a queue is
+forming. A 429 is not handled specially anywhere — the message falls to
+`email_outbox` and waits for a worker whose real interval is about 88 minutes,
+and the visitor's own **Send it again** hits the same ceiling.
+
+Downgraded from S1 on 2026-07-30. Dropping the receipt email halves the volume
+and takes the peak to 3.6–4.8/s, inside the current limit — see
+[the plan](../superpowers/plans/2026-07-30-receipt-email-removal.md). The
+request below is then insurance rather than a blocker. **Send it either way**:
+it costs nothing and the turnaround is somebody else's.
 
 - [ ] Ask Resend support for 50/s. **Send the request on the earliest possible
       day**; it is the one item here with a third party's response time in it.
 - [ ] Confirm a valid card is on file. A declined card turns the soft quota into
       a hard stop, which is the only way volume can end the event.
+- [ ] **Confirm transactional pay-as-you-go is switched on.** With the receipt
+      email, 60,000 messages against a 50,000 allowance means the last ~10,000
+      are overage — about $9 at $0.90 per 1,000. Off, sending stops dead at
+      50,000 mid-event. The Settings → Usage screen shows the toggle beside
+      Automations, so the transactional one has to be found and read
+      deliberately rather than assumed.
+- [ ] **Set a daily limit of 60,000–80,000** (Settings → Usage → Daily limit,
+      currently unlimited). This is the better protection than leaving
+      pay-as-you-go off: it bounds a runaway loop to tens of dollars while
+      leaving roughly twice the headroom a real event day needs. Turning
+      pay-as-you-go off to cap the cost instead trades a bounded $180 — the
+      hard cap is five times the plan quota — against the event stopping at the
+      booth, which is the wrong way round.
 
 ### B2. The Supabase plan is not recorded (S1, by D-7)
 
@@ -151,6 +171,12 @@ unsubscribe at any time", and the terms say every message includes a way to stop
 receiving them. **Nothing in this repository sends marketing mail or offers an
 unsubscribe link**, which is correct — but it means the promise is owned by a
 system that has not been chosen yet, and CASL requires it of whoever sends.
+
+Resend is the obvious candidate and **cannot take the list as things stand**:
+its Marketing side on this team is on the Free tier, capped at 1,000 contacts
+(Settings → Usage, read 2026-07-30). A consented list from a 30,000-entrant
+event does not fit. That is not a blocker for the event — nothing is sent during
+it — but it means the receiving system is not merely unnamed, it is unbudgeted.
 
 - [ ] Name the platform the consented list goes to, and confirm it puts an
       unsubscribe link in every message.
