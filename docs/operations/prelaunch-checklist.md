@@ -61,15 +61,29 @@ step in [on-site-runbook.md](on-site-runbook.md). Cancel by **2026-08-31**.
       entrants, each receiving a verification email and a number receipt. The
       free allowance is nowhere near this. Pro was taken on 2026-07-29.
 
-      Note the tier: Pro includes 50,000 messages at $20 and 100,000 at $35,
-      with overage at $0.90 per 1,000. On the 30,000-entrant estimate the 50K
-      tier runs about 10,000 messages over, which is only ~$9 — the reason to
-      take the 100K tier is not the money but not wanting a billing surprise
-      to be something anybody thinks about on event day.
+      **The tier does not have to be decided in advance, and should not be.**
+      Pro includes 50,000 messages at $20 and 100,000 at $35, and going over
+      the included figure does not stop anything: overage is charged
+      automatically at $0.90 per 1,000, and sending only pauses at a hard cap
+      of **five times** the plan quota — 250,000 messages on the 50K tier,
+      which is about 125,000 entrants. This event cannot reach that. Resend
+      also emails a warning at 80% of quota, which on the 50K tier lands at
+      roughly 20,000 entrants.
+
+      So: stay on 50K, watch the number during the day, and move up only if
+      the volume genuinely arrives. The whole downside of guessing low is $9.
+- [ ] **Confirm a valid card is on file**, because that is what the automatic
+      overage charge draws on. It is the one way the quota can actually stop
+      the event: a declined card and the pause is not about volume any more.
 - [ ] **Ask Resend to raise the API rate limit.** The default is **10 requests
       per second per team** (Settings → Usage shows the team's current value —
-      read it there rather than assuming). It does not vary by plan; an
-      increase is a support request, granted to trusted senders.
+      read it there rather than assuming). It does not vary by plan.
+
+      **This is the opposite of the plan tier above, and it is why it has to
+      be done in advance.** The quota is soft, self-serve and reversible; the
+      rate limit is a hard 429, cannot be changed from the dashboard, and
+      needs a human at Resend support to grant it. There is no version of
+      raising it at two in the afternoon with a queue at the booth.
 
       **Ask for 50/s.** Both messages are sent inline as visitors arrive, so
       30,000 entrants across a seven-hour day averages only ~2.4/s — but that
