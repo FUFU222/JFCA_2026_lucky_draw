@@ -89,7 +89,13 @@ export const messages = {
     invalidBody:
       'It may have expired, or it may already have been used. Enter again to get a new link.',
     invalidAction: 'Go to the entry form',
-    failed: 'Your number could not be issued. Please try again.',
+    // Shown when the answer never came back — which on a venue network is the
+    // likeliest failure there is, and by then the number may already be issued
+    // and emailed. "Could not be issued" is a claim this screen is in no
+    // position to make, and it talks somebody out of a number they already
+    // have. Pressing again is always safe: a repeat confirmation of the same
+    // link returns the same number, never a second one.
+    failed: 'That did not go through. Tap again — you will not get a second number.',
   },
 
   receipt: {

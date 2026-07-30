@@ -94,9 +94,14 @@ describe('VerificationConfirmation', () => {
 
     pressGetMyNumber();
 
+    // This is the venue-network case, and the screen must not claim the number
+    // failed — the request may well have reached the server and issued it.
     await waitFor(() =>
-      expect(screen.getByRole('alert')).toHaveTextContent('could not be issued'),
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'That did not go through. Tap again — you will not get a second number.',
+      ),
     );
+    expect(screen.getByRole('alert')).not.toHaveTextContent(/could not be issued/i);
     expect(screen.getByRole('button', { name: 'Get my number' })).toBeEnabled();
   });
 });
