@@ -138,7 +138,7 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
     await supabase.from('campaigns').delete().in('id', campaignIds);
   });
 
-  it('carries a submission through to an issued number and a sent receipt', async () => {
+  it('carries a submission through to an issued number, and sends nothing after it', async () => {
     const campaign = await createOpenCampaign();
     const mailer = new FakeMailer();
     const service = buildService(mailer);
@@ -177,8 +177,11 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
     });
 
     expect(confirmed?.number).toBe(BigInt(10_000));
-    expect(mailer.receipts).toHaveLength(1);
-    expect(mailer.receipts[0].receiptToken).toBe(confirmed?.receiptToken);
+    // One message for the whole journey. The link that arrived in it returns to
+    // this number for good, so a receipt would be a second copy of a durable
+    // thing the visitor already holds.
+    expect(mailer.receipts).toHaveLength(0);
+    expect(mailer.verification).toHaveLength(1);
 
     const { data: verified } = await supabase
       .from('raffle_entries')
@@ -188,11 +191,13 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
     expect(verified).toMatchObject({ state: 'VERIFIED', number: 10_000 });
     expect(verified?.receipt_token_hash).not.toBe(confirmed?.receiptToken);
 
+    // Nothing queued: the whole journey now costs one message, sent inline at
+    // the start of it, and the confirmation arms nothing behind itself.
     const { data: outbox } = await supabase
       .from('email_outbox')
       .select('status')
       .eq('entry_id', (await entryId(campaign.id)) ?? '');
-    expect(outbox).toEqual([{ status: 'SENT' }]);
+    expect(outbox).toEqual([]);
   });
 
   it('resets a verified test entry so the same address can rehearse the whole journey again', async () => {
@@ -237,11 +242,12 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
       token: mailer.verification[1].token,
     });
     expect(secondConfirmation?.number).toBe(BigInt(900_000_002));
-    // The number reaching the screen proves nothing about the mail: the receipt
-    // job the first run marked as sent has to be released too, or the rehearsal
-    // silently stops exercising the one email the operator most wants to see.
-    expect(mailer.receipts).toHaveLength(2);
-    expect(mailer.receipts[1].number).toBe(BigInt(900_000_002));
+    // The number reaching the screen proves nothing about the mail, which is
+    // why this test watches the mail and not only the number. There is one
+    // message now instead of two, and the rehearsal has to produce a fresh one
+    // every time or it stops exercising the journey it exists to exercise.
+    expect(mailer.verification).toHaveLength(2);
+    expect(mailer.receipts).toHaveLength(0);
   });
 
   it('refuses a rehearsal on an address a real entry holds, and hands a rehearsal address back to a real visitor', async () => {
@@ -317,7 +323,7 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
     ).resolves.toBeNull();
   });
 
-  it('issues one number and one receipt for concurrent confirmations of the same link', async () => {
+  it('issues one number, and no mail, for concurrent confirmations of the same link', async () => {
     const campaign = await createOpenCampaign();
     const mailer = new FakeMailer();
     const service = buildService(mailer);
@@ -336,7 +342,7 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
     ]);
 
     expect(results.map((result) => result?.number)).toEqual([BigInt(10_000), BigInt(10_000)]);
-    expect(mailer.receipts).toHaveLength(1);
+    expect(mailer.receipts).toHaveLength(0);
 
     const { data: campaignAfter } = await supabase
       .from('campaigns')
@@ -346,17 +352,19 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
     expect(campaignAfter?.next_number).toBe(10_001);
   });
 
-  it('leaves a failed receipt retryable without invalidating the number', async () => {
+  it('issuing a number arms no mail at all, so no provider can reach a confirmation', async () => {
     const campaign = await createOpenCampaign();
     const mailer = new FakeMailer();
     const service = buildService(mailer);
 
     await service.requestVerification({
       eventSlug: campaign.slug,
-      email: `failed-${uniqueSuffix()}@example.com`,
+      email: `no-receipt-${uniqueSuffix()}@example.com`,
       termsConsent: true,
       turnstileToken: 'captcha',
     });
+    // A mailer that throws on a receipt. If anything still asked it for one,
+    // this test would see the failure recorded below.
     mailer.receiptFailure = new Error('resend unavailable');
 
     const confirmed = await service.confirmVerification({
@@ -366,27 +374,24 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
 
     expect(confirmed?.number).toBe(BigInt(10_000));
 
+    // The assertion that guards migration `0010`. The confirmation used to arm
+    // a `RECEIPT` row inside its own transaction, at three separate points in
+    // the function, so removing the send alone would have left the retry worker
+    // to deliver it about ninety minutes later — the change undone by a job
+    // nobody looked at.
     const entry = await entryId(campaign.id);
-    const { data: job } = await supabase
+    const { data: jobs } = await supabase
       .from('email_outbox')
-      .select('status, attempt_count, last_error, available_at')
-      .eq('entry_id', entry ?? '')
-      .single();
-    expect(job).toMatchObject({
-      status: 'FAILED',
-      attempt_count: 1,
-      last_error: 'resend unavailable',
-    });
-    expect(new Date(job?.available_at ?? '').getTime()).toBeGreaterThan(Date.now());
+      .select('kind, status')
+      .eq('entry_id', entry ?? '');
+    expect(jobs).toEqual([]);
 
     const { data: deliveries } = await supabase
       .from('email_deliveries')
-      .select('kind, provider_status, provider_error')
+      .select('kind')
       .eq('entry_id', entry ?? '')
       .eq('kind', 'RECEIPT');
-    expect(deliveries).toEqual([
-      { kind: 'RECEIPT', provider_status: 'FAILED', provider_error: 'resend unavailable' },
-    ]);
+    expect(deliveries).toEqual([]);
   });
 
   it('sends once per cooldown and never more than three times for one token', async () => {
@@ -724,7 +729,7 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
     expect(after?.lease_expires_at).toBeNull();
   });
 
-  it('delivers a receipt the inline send could not, on the next worker run', async () => {
+  it('still delivers a receipt job left behind from before it stopped arming them', async () => {
     const campaign = await createOpenCampaign();
     const mailer = new FakeMailer();
     const service = buildService(mailer);
@@ -735,7 +740,6 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
       termsConsent: true,
       turnstileToken: 'captcha',
     });
-    mailer.receiptFailure = new Error('provider unavailable');
 
     const confirmed = await service.confirmVerification({
       eventSlug: campaign.slug,
@@ -744,15 +748,23 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
     expect(confirmed?.number).toBe(BigInt(10_000));
     expect(mailer.receipts).toHaveLength(0);
 
-    // A failed job is not immediately claimable; it becomes available after the
-    // backoff the worker recorded.
+    // Nothing arms a receipt any more, so this is the state production is
+    // actually in: rows written by confirmations that happened before `0010`.
+    // The worker has to keep being able to settle them, or 送信待ちメール数 and
+    // /api/health would report a queue that can never drain. That is the whole
+    // reason the `RECEIPT` plumbing was left in place, and this is what holds
+    // it there.
     const entry = await entryId(campaign.id);
-    await supabase
-      .from('email_outbox')
-      .update({ available_at: new Date(Date.now() - 1_000).toISOString() })
-      .eq('entry_id', entry ?? '');
+    await supabase.from('email_outbox').insert({
+      entry_id: entry,
+      kind: 'RECEIPT',
+      status: 'FAILED',
+      attempt_count: 1,
+      last_error: 'provider unavailable',
+      // Already past its backoff, so the next run can claim it.
+      available_at: new Date(Date.now() - 1_000).toISOString(),
+    });
 
-    mailer.receiptFailure = null;
     await clearOutboxOutsideThisTest();
     const summary = await buildOutboxProcessor(mailer).process();
 

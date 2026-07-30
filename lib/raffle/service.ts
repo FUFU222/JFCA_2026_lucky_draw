@@ -363,9 +363,11 @@ export class RaffleService {
     // guards against an adapter returning an unrelated row.
     if (!confirmed || confirmed.campaignSlug !== request.eventSlug) return null;
 
-    const number = BigInt(confirmed.number);
-    await this.trySendReceipt(confirmed, number, receiptToken);
-    return { number, receiptToken };
+    // No second email. The confirmation link the visitor is holding already
+    // returns here for good — see `issuedReceiptToken` — so a receipt would
+    // duplicate a durable copy they have, at the cost of half the mail volume
+    // on the day. `0010` stops the outbox row being armed for the same reason.
+    return { number: BigInt(confirmed.number), receiptToken };
   }
 
   private async verifiedOperatorTestMode(): Promise<boolean> {
@@ -468,54 +470,6 @@ export class RaffleService {
     }
   }
 
-  private async trySendReceipt(
-    confirmed: ConfirmedVerification,
-    number: bigint,
-    receiptToken: string,
-  ): Promise<void> {
-    const { entryId, email, campaignSlug } = confirmed;
-    // The number is already durable, so a receipt that cannot be sent now stays
-    // a retryable outbox job rather than failing the confirmation.
-    try {
-      const job = await this.dependencies.repository.claimReceiptJob(entryId);
-      if (!job) return;
-
-      // Only the provider call is treated as a delivery failure. If the send
-      // succeeded and the bookkeeping afterwards throws, the error propagates
-      // to the outer handler and the job stays leased until it expires, rather
-      // than being recorded as a failure the visitor never experienced.
-      let deliveryError: string | null = null;
-      let providerMessageId: string | null = null;
-      try {
-        const result = await this.dependencies.mailer.sendReceipt({
-          eventSlug: campaignSlug,
-          email,
-          number,
-          receiptToken,
-        });
-        providerMessageId = result.id ?? null;
-      } catch (error) {
-        deliveryError = messageOf(error);
-      }
-
-      // Completing the job comes first. It is what stops the message being sent
-      // again; the delivery record is only bookkeeping, and ordering it ahead
-      // would let a failed insert cost a duplicate receipt.
-      await this.dependencies.repository.completeReceiptJob(
-        job,
-        deliveryError === null ? { sent: true } : { sent: false, error: deliveryError },
-      );
-      await this.dependencies.repository.recordDelivery({
-        entryId,
-        kind: 'RECEIPT',
-        status: deliveryError === null ? 'SENT' : 'FAILED',
-        providerMessageId,
-        providerError: deliveryError,
-      });
-    } catch (error) {
-      this.dependencies.onDeliveryError?.(error);
-    }
-  }
 }
 
 function definedOnly<T extends Record<string, unknown>>(values: T): Partial<T> {

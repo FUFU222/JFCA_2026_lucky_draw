@@ -6,6 +6,11 @@ import { NumberReceipt } from '../public/number-receipt';
 
 const DEFAULT_NUMBER = '10000';
 
+// A stand-in, not a source of truth: the real page takes the title from the
+// campaign row, and a constant here that drifted from it would be a preview of
+// something nobody sees.
+const SAMPLE_EVENT_TITLE = 'Japan Festival Canada 2026';
+
 /**
  * The pop-in and confetti on `NumberReceipt` only ever fire once per real
  * visitor, on the one day their number is issued — there is no way to see
@@ -53,7 +58,7 @@ export function DesignPreview() {
 
       <div className="rounded-2xl border border-dashed border-neutral-300 bg-neutral-50 p-6 sm:p-10">
         <div className="mx-auto max-w-xl rounded-2xl bg-white p-6 shadow-sm">
-          <NumberReceipt key={replayKey} number={parsed} />
+          <NumberReceipt key={replayKey} number={parsed} eventTitle={SAMPLE_EVENT_TITLE} />
         </div>
       </div>
     </div>

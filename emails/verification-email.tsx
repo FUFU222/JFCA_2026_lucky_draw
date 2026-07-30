@@ -3,13 +3,22 @@ import { Body, Container, Head, Heading, Html, Img, Link, Preview, Section, Text
 import { emailStyles } from './styles';
 import { LOGO_ALT, logoUrl } from './logo';
 
+/**
+ * This is now the only message the Lucky Draw sends, which changes what it is
+ * for. It was a step to get past; it is also the visitor's durable copy of
+ * their number, because once a number has been issued this same link returns
+ * to it for good (`issuedReceiptToken`). So it says to keep the message, and it
+ * separates the deadline — 24 hours to claim — from the link's own lifetime,
+ * which has none.
+ */
 const copy = {
-  preview: 'Confirm your email to receive your Lucky Draw number',
+  preview: 'Confirm your email to get your Lucky Draw number',
   heading: 'Confirm your email address',
   intro:
-    'Thank you for entering the LIVAPON Lucky Draw. Confirm this address to receive your Lucky Draw number.',
+    'Thank you for entering the LIVAPON Lucky Draw. Confirm this address to get your Lucky Draw number.',
   action: 'Confirm my email address',
-  expiry: 'This link works for 24 hours. After that, submit the entry form again to get a new one.',
+  keep: 'Keep this email. After you have your number, this same link brings it back any time — it is the easiest way to find your number again.',
+  expiry: 'Confirm within 24 hours. After that, submit the entry form again to get a new link.',
   fallback: 'If the button does not work, open this address in your browser:',
   ignore: 'If you did not enter the Lucky Draw, you can ignore this message.',
   contact: 'Questions:',
@@ -41,6 +50,7 @@ export function VerificationEmail({ verificationUrl, supportEmail }: Verificatio
             </Link>
           </Section>
 
+          <Text style={emailStyles.paragraph}>{t.keep}</Text>
           <Text style={emailStyles.paragraph}>{t.expiry}</Text>
 
           <Text style={emailStyles.muted}>{t.fallback}</Text>
