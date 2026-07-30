@@ -68,8 +68,10 @@ in it, and neither do they appear in 確認済み応募数 or 確認待ち.
 
 ## Someone lost their number
 
-The receipt link never expires, so it is still in their inbox. If they cannot
-find it:
+The receipt link never expires, so it is still in their inbox. **The
+confirmation link works too** — opening it again takes them to their number
+rather than saying it has been used, so either email in their inbox will do.
+If they cannot find either:
 
 1. Search their address under **応募一覧** and read the number to them.
 2. If they contact you later, they are directed to `info@chairman.jp`. An

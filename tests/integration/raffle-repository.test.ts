@@ -1,7 +1,11 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
-import { verificationLinkState } from '../../lib/db/public-queries';
+import {
+  findReceipt,
+  issuedReceiptToken,
+  verificationLinkState,
+} from '../../lib/db/public-queries';
 import { SupabaseOutboxRepository, SupabaseRaffleRepository } from '../../lib/db/server';
 import { EmailOutboxProcessor } from '../../lib/email/outbox';
 import { SupabaseRateLimiter } from '../../lib/raffle/rate-limit';
@@ -475,6 +479,41 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
         eventSlug: campaign.slug,
         token: mailer.verification[0].token,
       }),
+    ).resolves.toBeNull();
+  });
+
+  it('hands a used link back to the number it issued, instead of calling it unusable', async () => {
+    const campaign = await createOpenCampaign();
+    const mailer = new FakeMailer();
+    const service = buildService(mailer);
+
+    await service.requestVerification({
+      eventSlug: campaign.slug,
+      email: `reopen-${uniqueSuffix()}@example.com`,
+      termsConsent: true,
+      turnstileToken: 'captcha',
+    });
+    const { token } = mailer.verification[0];
+
+    const confirmed = await service.confirmVerification({ eventSlug: campaign.slug, token });
+    expect(confirmed).toMatchObject({ number: BigInt(10_000) });
+
+    // The link is spent, and that is exactly the person who must not be told
+    // to start over: the number is theirs and this is the link that issued it.
+    await expect(verificationLinkState(campaign.slug, token)).resolves.toBe('unusable');
+    const receiptToken = await issuedReceiptToken(campaign.slug, token, RECEIPT_SECRET);
+    expect(receiptToken).toBe(confirmed?.receiptToken);
+    await expect(findReceipt(campaign.slug, receiptToken ?? '')).resolves.toMatchObject({
+      number: BigInt(10_000),
+    });
+
+    // A link that never issued anything stays a dead end, and so does a
+    // correct link read with the wrong secret.
+    await expect(
+      issuedReceiptToken(campaign.slug, 'z'.repeat(43), RECEIPT_SECRET),
+    ).resolves.toBeNull();
+    await expect(
+      issuedReceiptToken(campaign.slug, token, 'a-different-receipt-secret'),
     ).resolves.toBeNull();
   });
 

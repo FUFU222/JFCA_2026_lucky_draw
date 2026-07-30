@@ -1,9 +1,13 @@
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 
 import { PageShell } from '../../../../components/public/page-shell';
 import { VerificationConfirmation } from '../../../../components/public/verification-confirmation';
-import { findCampaign, verificationLinkState } from '../../../../lib/db/public-queries';
+import {
+  findCampaign,
+  issuedReceiptToken,
+  verificationLinkState,
+} from '../../../../lib/db/public-queries';
 import { messages } from '../../../../lib/i18n/messages';
 
 // This page must never be cached: it reports whether a link is still usable.
@@ -28,6 +32,25 @@ export default async function VerifyPage({
         <VerificationConfirmation eventSlug={eventSlug} token={token} />
       </PageShell>
     );
+  }
+
+  // Before calling a used link unusable, check whether it is used *because it
+  // worked*. If a number was issued from this link, the person holding it is
+  // owed that number, not "enter again to get a new link" — which is advice
+  // that cannot work for them, since a second entry on the same address is
+  // answered with silence by design.
+  //
+  // This is also what makes the hand-off after the button press survivable.
+  // Issuing the number and showing it are two steps, and the second one can be
+  // lost — a closed tab, a dropped connection, an in-app browser that will not
+  // navigate. Re-opening the link from the email now finishes the job.
+  const receiptToken = await issuedReceiptToken(
+    eventSlug,
+    token,
+    process.env.RECEIPT_TOKEN_SECRET ?? '',
+  );
+  if (receiptToken) {
+    redirect(`/${eventSlug}/number/${encodeURIComponent(receiptToken)}`);
   }
 
   // Nothing is offered once the event is over, because there is nothing to

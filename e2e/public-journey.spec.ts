@@ -136,9 +136,12 @@ test('a visitor enters, confirms, and receives one number', async ({ page }) => 
   await expect(page).toHaveURL(new RegExp(`/${campaign.slug}/number/`));
   const receiptUrl = page.url();
 
-  // A second visit to the used link cannot issue another number.
+  // A second visit to the used link cannot issue another number — and it must
+  // not read as a dead end either. This is the visitor whose number exists and
+  // whose hand-off went wrong, so the link takes them to it.
   await page.goto(`/${campaign.slug}/verify/${token}`);
-  await expect(page.getByRole('heading', { name: 'This link cannot be used' })).toBeVisible();
+  await expect(page.getByText('No. 10000')).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`/${campaign.slug}/number/`));
 
   const { data: campaignAfter } = await supabase
     .from('campaigns')

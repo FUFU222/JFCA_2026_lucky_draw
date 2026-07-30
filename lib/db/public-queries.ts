@@ -2,7 +2,7 @@ import 'server-only';
 
 import { createServiceRoleClient } from './server';
 import type { Campaign } from './types';
-import { hashToken } from '../raffle/tokens';
+import { deriveReceiptToken, hashToken } from '../raffle/tokens';
 
 /**
  * Read-only lookups for the public pages. Nothing here mutates: opening an
@@ -85,6 +85,36 @@ export async function verificationLinkState(
   if (new Date(row.expires_at).getTime() <= Date.now()) return 'unusable';
 
   return 'usable';
+}
+
+/**
+ * The receipt a visitor would reach if they used this verification link again.
+ *
+ * A consumed link is a dead end today: the page says it cannot be used and
+ * offers the entry form, which is wrong advice for the one person it is most
+ * likely to be shown to — somebody whose number was already issued from this
+ * exact link, and whose only remaining copy of it is an email they may not
+ * have open. Anything that interrupts the hand-off after the number is issued
+ * lands here: a tab closed too early, a navigation that did not happen, a
+ * second tap on a link already used.
+ *
+ * The receipt token is derivable from the verification token the visitor is
+ * still holding — that is the same relationship `confirm_raffle_verification`
+ * relies on to answer a repeated confirmation with the same number — so no new
+ * credential is involved and nothing is revealed to anybody who does not
+ * already hold the link.
+ */
+export async function issuedReceiptToken(
+  eventSlug: string,
+  rawVerificationToken: string,
+  receiptTokenSecret: string,
+): Promise<string | null> {
+  const receiptToken = deriveReceiptToken(rawVerificationToken, receiptTokenSecret);
+  const receipt = await findReceipt(eventSlug, receiptToken);
+  // No receipt means no number was ever issued from this link, or the secret
+  // has been rotated since. Either way the caller falls back to its own
+  // "cannot be used" answer rather than inventing one.
+  return receipt ? receiptToken : null;
 }
 
 export interface ReceiptView {

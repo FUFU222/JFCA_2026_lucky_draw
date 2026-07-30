@@ -3,11 +3,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { VerificationConfirmation } from '../../components/public/verification-confirmation';
 
-const replace = vi.fn();
-
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({ replace }),
-}));
+/**
+ * The hand-off is a full document navigation, not a router transition. On
+ * production a confirm returned 200, the number was issued, and no request for
+ * the receipt page was ever made — the soft navigation produced nothing at
+ * all. `assign` is stubbed here for the same reason it is used there: it is
+ * the one form of this that cannot silently do nothing.
+ */
+const assign = vi.fn();
 
 function renderConfirmation() {
   return render(<VerificationConfirmation eventSlug="jfca-2026" token={'a'.repeat(43)} />);
@@ -29,7 +32,8 @@ function respondWith(body: unknown, status = 200) {
 }
 
 beforeEach(() => {
-  replace.mockClear();
+  assign.mockClear();
+  vi.stubGlobal('location', { assign } as unknown as Location);
 });
 
 afterEach(() => {
@@ -44,7 +48,7 @@ describe('VerificationConfirmation', () => {
     pressGetMyNumber();
 
     await waitFor(() =>
-      expect(replace).toHaveBeenCalledWith('/jfca-2026/number/receipt-token'),
+      expect(assign).toHaveBeenCalledWith('/jfca-2026/number/receipt-token'),
     );
   });
 
@@ -53,9 +57,9 @@ describe('VerificationConfirmation', () => {
     renderConfirmation();
 
     pressGetMyNumber();
-    await waitFor(() => expect(replace).toHaveBeenCalled());
+    await waitFor(() => expect(assign).toHaveBeenCalled());
 
-    // `router.replace` only starts the navigation. Releasing the busy state
+    // The navigation is asynchronous. Releasing the busy state
     // here used to put this screen back — with a live, tappable button — for
     // the second or so the receipt page takes to paint, which reads as
     // "nothing happened" and invites a second tap.
@@ -75,7 +79,7 @@ describe('VerificationConfirmation', () => {
       expect(screen.getByRole('alert')).toHaveTextContent('It may have expired'),
     );
     expect(screen.getByRole('button', { name: 'Get my number' })).toBeEnabled();
-    expect(replace).not.toHaveBeenCalled();
+    expect(assign).not.toHaveBeenCalled();
   });
 
   it('hands the screen back when the request never reaches the server', async () => {

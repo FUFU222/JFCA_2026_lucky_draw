@@ -1,6 +1,5 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { Spinner } from '../ui/spinner';
@@ -26,7 +25,6 @@ export interface VerificationConfirmationProps {
  */
 export function VerificationConfirmation({ eventSlug, token }: VerificationConfirmationProps) {
   const t = messages.verify;
-  const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,14 +45,27 @@ export function VerificationConfirmation({ eventSlug, token }: VerificationConfi
         return;
       }
 
-      // Deliberately stays busy, and deliberately has no `finally`.
-      // `router.replace` only *starts* the navigation; the number page is
-      // dynamic and has its own database reads, so it is around a second
-      // before it paints. Releasing the busy state here put this screen back
-      // — with a live, tappable button — for that whole second, which reads as
-      // "nothing happened" and invites a second tap. The dialog stays up,
-      // still saying it is issuing the number, until the new page replaces it.
-      router.replace(`/${eventSlug}/number/${encodeURIComponent(payload.receipt_token)}`);
+      // A full document navigation, not `router.replace`.
+      //
+      // The number is issued by the time this line runs, so the hand-off to
+      // the receipt page is the last thing that can still fail — and on
+      // production it did: a confirm returned 200, the number was issued and
+      // the receipt emailed, and no request for the receipt page was ever
+      // made. The client-side navigation produced nothing at all. These links
+      // are opened from a mail app, so the page is very often inside an
+      // in-app browser, which is exactly where the App Router's history
+      // handling is least dependable.
+      //
+      // `assign` cannot silently do nothing. It costs a document load the
+      // soft navigation saved, which is the right trade for the one screen
+      // the whole visit exists to reach. A used link now also redirects to
+      // this same page server-side, so even a failure here is recoverable.
+      //
+      // Deliberately stays busy, and deliberately has no `finally`: the
+      // navigation is asynchronous, and releasing the button first put this
+      // screen back with a live, tappable button, which reads as "nothing
+      // happened" and invites a second tap.
+      window.location.assign(`/${eventSlug}/number/${encodeURIComponent(payload.receipt_token)}`);
     } catch {
       setError(t.failed);
       stopWorking();

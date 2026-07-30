@@ -77,6 +77,20 @@ That worker asks for a 5-minute schedule and does not get one — measured media
 visitor's own "Send it again" is the fast remedy; the manual `workflow_dispatch`
 is the operator's. Do not write a five-minute figure back into any document.
 
+**Issuing the number and showing it are two steps, and only the first is
+safe.** The RPC is transactional; the hand-off to the receipt page is not. On
+2026-07-30 a production confirm returned 200, issued 10000 and emailed the
+receipt, and the Vercel logs show no request for the receipt page at all — the
+client-side navigation produced nothing. These links are opened from mail
+apps, so the page is usually inside an in-app browser. Two things came out of
+it: the hand-off is now `window.location.assign`, which cannot silently do
+nothing, and **a used verification link redirects to the number it issued**
+rather than saying it cannot be used. The receipt token is derivable from the
+verification token the visitor still holds, which is the same relationship the
+RPC uses to answer a repeated confirmation, so re-opening the link finishes a
+hand-off that failed. Do not turn either back into a soft navigation or a dead
+end.
+
 **Test mode is verified server-side, twice.** `?test=1` only does anything for a
 signed-in operator, and `RaffleService` re-checks the operator session before
 honouring the flag — a client claiming `is_test` on its own silently gets the
