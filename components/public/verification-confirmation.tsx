@@ -45,7 +45,7 @@ export function VerificationConfirmation({ eventSlug, token }: VerificationConfi
         return;
       }
 
-      // A full document navigation, not `router.replace`.
+      // A full document navigation, and a history *replacement*.
       //
       // The number is issued by the time this line runs, so the hand-off to
       // the receipt page is the last thing that can still fail — and on
@@ -56,16 +56,22 @@ export function VerificationConfirmation({ eventSlug, token }: VerificationConfi
       // in-app browser, which is exactly where the App Router's history
       // handling is least dependable.
       //
-      // `assign` cannot silently do nothing. It costs a document load the
-      // soft navigation saved, which is the right trade for the one screen
-      // the whole visit exists to reach. A used link now also redirects to
-      // this same page server-side, so even a failure here is recoverable.
+      // `location.replace` cannot silently do nothing. It costs a document
+      // load the soft navigation saved, which is the right trade for the one
+      // screen the whole visit exists to reach. `assign` would do that much
+      // too, but it also pushes a history entry, leaving the spent verify URL
+      // one Back press behind the number — so Back would bounce off a
+      // server-side redirect and read as a broken button. `replace` keeps the
+      // history behaviour `router.replace` had.
+      //
+      // A used link now redirects to this same page server-side, so even a
+      // failure here is recoverable by tapping the link again.
       //
       // Deliberately stays busy, and deliberately has no `finally`: the
       // navigation is asynchronous, and releasing the button first put this
       // screen back with a live, tappable button, which reads as "nothing
       // happened" and invites a second tap.
-      window.location.assign(`/${eventSlug}/number/${encodeURIComponent(payload.receipt_token)}`);
+      window.location.replace(`/${eventSlug}/number/${encodeURIComponent(payload.receipt_token)}`);
     } catch {
       setError(t.failed);
       stopWorking();

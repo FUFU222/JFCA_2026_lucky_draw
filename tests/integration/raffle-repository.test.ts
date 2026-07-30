@@ -515,6 +515,13 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
     await expect(
       issuedReceiptToken(campaign.slug, token, 'a-different-receipt-secret'),
     ).resolves.toBeNull();
+
+    // The event check is the one security-relevant guard on this path, and it
+    // lives inside `findReceipt` rather than at the call site. Pinned here so
+    // a refactor of that function cannot quietly turn this into a cross-event
+    // read of somebody else's number.
+    const otherCampaign = await createOpenCampaign();
+    await expect(issuedReceiptToken(otherCampaign.slug, token, RECEIPT_SECRET)).resolves.toBeNull();
   });
 
   it('refuses to issue a number while the campaign is DRAFT, but still lets a rehearsal through', async () => {

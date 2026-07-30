@@ -8,6 +8,7 @@ import {
   issuedReceiptToken,
   verificationLinkState,
 } from '../../../../lib/db/public-queries';
+import { requiredSecret } from '../../../../lib/db/server';
 import { messages } from '../../../../lib/i18n/messages';
 
 // This page must never be cached: it reports whether a link is still usable.
@@ -34,25 +35,6 @@ export default async function VerifyPage({
     );
   }
 
-  // Before calling a used link unusable, check whether it is used *because it
-  // worked*. If a number was issued from this link, the person holding it is
-  // owed that number, not "enter again to get a new link" — which is advice
-  // that cannot work for them, since a second entry on the same address is
-  // answered with silence by design.
-  //
-  // This is also what makes the hand-off after the button press survivable.
-  // Issuing the number and showing it are two steps, and the second one can be
-  // lost — a closed tab, a dropped connection, an in-app browser that will not
-  // navigate. Re-opening the link from the email now finishes the job.
-  const receiptToken = await issuedReceiptToken(
-    eventSlug,
-    token,
-    process.env.RECEIPT_TOKEN_SECRET ?? '',
-  );
-  if (receiptToken) {
-    redirect(`/${eventSlug}/number/${encodeURIComponent(receiptToken)}`);
-  }
-
   // Nothing is offered once the event is over, because there is nothing to
   // offer. Sending this visitor back to the entry form would only walk them
   // into "Entries are closed" — the same wall, one tap further on.
@@ -69,6 +51,30 @@ export default async function VerifyPage({
         </section>
       </PageShell>
     );
+  }
+
+  // Before calling a used link unusable, check whether it is used *because it
+  // worked*. If a number was issued from this link, the person holding it is
+  // owed that number, not "enter again to get a new link" — advice that cannot
+  // work for them, since a second entry on the same address is answered with
+  // silence by design.
+  //
+  // This is what makes the hand-off after the button press survivable. Issuing
+  // the number and showing it are two steps and the second one can be lost — a
+  // closed tab, a dropped connection, an in-app browser that will not
+  // navigate. Re-opening the link now finishes the job.
+  //
+  // Below the `event_over` branch on purpose: a receipt can only exist for a
+  // consumed token, and `event_over` is only reached for an unconsumed one, so
+  // this can never fire for a closed campaign. Ordering it last keeps the read
+  // off the path every unconfirmed entrant takes the moment intake closes.
+  const receiptToken = await issuedReceiptToken(
+    eventSlug,
+    token,
+    requiredSecret('RECEIPT_TOKEN_SECRET'),
+  );
+  if (receiptToken) {
+    redirect(`/${eventSlug}/number/${encodeURIComponent(receiptToken)}`);
   }
 
   return (

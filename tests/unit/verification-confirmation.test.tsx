@@ -7,10 +7,11 @@ import { VerificationConfirmation } from '../../components/public/verification-c
  * The hand-off is a full document navigation, not a router transition. On
  * production a confirm returned 200, the number was issued, and no request for
  * the receipt page was ever made — the soft navigation produced nothing at
- * all. `assign` is stubbed here for the same reason it is used there: it is
- * the one form of this that cannot silently do nothing.
+ * all. `location.replace` is stubbed here for the same two reasons it is used
+ * there: it cannot silently do nothing, and unlike `assign` it does not leave
+ * the spent verify URL one Back press behind the number.
  */
-const assign = vi.fn();
+const replaceLocation = vi.fn();
 
 function renderConfirmation() {
   return render(<VerificationConfirmation eventSlug="jfca-2026" token={'a'.repeat(43)} />);
@@ -32,8 +33,8 @@ function respondWith(body: unknown, status = 200) {
 }
 
 beforeEach(() => {
-  assign.mockClear();
-  vi.stubGlobal('location', { assign } as unknown as Location);
+  replaceLocation.mockClear();
+  vi.stubGlobal('location', { replace: replaceLocation } as unknown as Location);
 });
 
 afterEach(() => {
@@ -48,7 +49,7 @@ describe('VerificationConfirmation', () => {
     pressGetMyNumber();
 
     await waitFor(() =>
-      expect(assign).toHaveBeenCalledWith('/jfca-2026/number/receipt-token'),
+      expect(replaceLocation).toHaveBeenCalledWith('/jfca-2026/number/receipt-token'),
     );
   });
 
@@ -57,7 +58,7 @@ describe('VerificationConfirmation', () => {
     renderConfirmation();
 
     pressGetMyNumber();
-    await waitFor(() => expect(assign).toHaveBeenCalled());
+    await waitFor(() => expect(replaceLocation).toHaveBeenCalled());
 
     // The navigation is asynchronous. Releasing the busy state
     // here used to put this screen back — with a live, tappable button — for
@@ -79,7 +80,7 @@ describe('VerificationConfirmation', () => {
       expect(screen.getByRole('alert')).toHaveTextContent('It may have expired'),
     );
     expect(screen.getByRole('button', { name: 'Get my number' })).toBeEnabled();
-    expect(assign).not.toHaveBeenCalled();
+    expect(replaceLocation).not.toHaveBeenCalled();
   });
 
   it('hands the screen back when the request never reaches the server', async () => {

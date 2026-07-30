@@ -68,10 +68,11 @@ in it, and neither do they appear in 確認済み応募数 or 確認待ち.
 
 ## Someone lost their number
 
-The receipt link never expires, so it is still in their inbox. **The
-confirmation link works too** — opening it again takes them to their number
-rather than saying it has been used, so either email in their inbox will do.
-If they cannot find either:
+The receipt link never expires, so it is still in their inbox. **The most
+recent confirmation email works too** — opening that link again takes them to
+their number rather than saying it has been used. Only the most recent one:
+if they used **Send it again**, the earlier links belong to spent cycles and
+still read as unusable. If they cannot find either email:
 
 1. Search their address under **応募一覧** and read the number to them.
 2. If they contact you later, they are directed to `info@chairman.jp`. An
