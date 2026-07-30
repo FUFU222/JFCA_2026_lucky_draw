@@ -67,16 +67,36 @@ export function ConfirmationDialog({
   // `mounted` belongs in here as well as in the render: on the first pass the
   // portal has not been created yet, so the button this wants to focus is not
   // in the document, and focus would silently stay on the page behind.
+  //
+  // Closing hands focus back to whatever opened it. That mattered less when
+  // the markup sat inline next to the trigger and the next Tab resumed nearby;
+  // now that the dialog portals to the end of `document.body`, leaving focus
+  // where it lands means the next Tab restarts from the top of the page.
+  const trigger = useRef<Element | null>(null);
   useEffect(() => {
-    if (open && mounted) cancelRef.current?.focus();
+    if (!mounted) return;
+    if (open) {
+      trigger.current = document.activeElement;
+      cancelRef.current?.focus();
+      return;
+    }
+    const previous = trigger.current;
+    trigger.current = null;
+    if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
   }, [open, mounted]);
 
   if (!open || !mounted) return null;
 
+  // `iframe` is in the list so a captcha rendered inside the dialog can be
+  // reached at all, and hidden inputs are out of it: Turnstile leaves a
+  // `cf-turnstile-response` field behind, and a hidden element as `first`
+  // meant Tab called `.focus()` on something unfocusable and simply stopped,
+  // while shift-Tab never matched and escaped the dialog altogether. This
+  // selector was written when no dialog contained an input.
   const focusable = () =>
     Array.from(
       dialogRef.current?.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), a[href], input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        'button:not([disabled]), a[href], iframe, input:not([disabled]):not([type="hidden"]), [tabindex]:not([tabindex="-1"])',
       ) ?? [],
     );
 
@@ -124,7 +144,7 @@ export function ConfirmationDialog({
   // dialog out of reach of any ancestor's transform, overflow or stacking
   // context, so it cannot come back the next time something is animated.
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4">
       <div
         data-testid="confirmation-dialog-backdrop"
         className="fade-in absolute inset-0 bg-neutral-950/50"
@@ -136,10 +156,14 @@ export function ConfirmationDialog({
         aria-modal="true"
         aria-labelledby={titleId}
         onKeyDown={handleKeyDown}
-        // `p-5` on a phone rather than `p-6`: with the page's own `p-4`
-        // outside it, 24px of panel padding left 295px inside on a 375px
-        // screen, and a Turnstile widget will not go below 300px. Five pixels
-        // were enough to push the whole panel off the edge.
+        // Padding is tighter on a phone than it looks like it should be, and
+        // the reason is arithmetic rather than taste. A Turnstile widget will
+        // not render below 300px. With `p-4` outside and `p-6` here, a 375px
+        // screen left 295px inside — and a 360px one, which is the width of
+        // most mid-range Android, left 280. `p-2` outside and `p-5` here
+        // gives 304px at 360 and 319 at 375, so the challenge fits on the
+        // phones people actually bring to a festival. Both go back to normal
+        // at `sm`, where there is room to spare.
         className="fade-in-up relative max-h-full w-full max-w-md overflow-y-auto rounded-2xl bg-white p-5 shadow-xl sm:p-6"
       >
         <h2 id={titleId} className="text-lg font-bold text-neutral-900">

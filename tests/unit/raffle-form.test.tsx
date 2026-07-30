@@ -1,10 +1,15 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { RaffleForm } from '../../components/public/raffle-form';
 import { countryOptions } from '../../lib/i18n/countries';
 
+// One token per challenge, never a constant. Cloudflare refuses a response
+// token that has already been verified, which is the whole reason the widget
+// resets — and with every challenge answering the same string, a regression
+// that reused a spent token would look identical to correct behaviour.
 const CAPTCHA_TOKEN = 'turnstile-test-token';
+const tokenFor = (n: number) => `${CAPTCHA_TOKEN}-${n}`;
 
 /**
  * `solveFirst` is how many renders hand back a token before the rest fail. The
@@ -15,7 +20,8 @@ const CAPTCHA_TOKEN = 'turnstile-test-token';
 function stubTurnstile({
   solve = true,
   solveFirst = Number.POSITIVE_INFINITY,
-}: { solve?: boolean; solveFirst?: number } = {}) {
+  deferred = false,
+}: { solve?: boolean; solveFirst?: number; deferred?: boolean } = {}) {
   let issue: ((token: string) => void) | null = null;
   let fail: (() => void) | null = null;
   let attempts = 0;
@@ -24,10 +30,17 @@ function stubTurnstile({
   // only renders would let a reset hand back a token the render was set up to
   // refuse, which is how the first version of this stub quietly disagreed with
   // itself.
+  // Cloudflare does not answer inline. `deferred` holds the answer until the
+  // test releases it, which is the only way to observe the window where the
+  // action has to stay disabled — a microtask or a timer would be flushed by
+  // the very `await` used to find the dialog.
+  const pending: Array<() => void> = [];
   const attempt = () => {
     attempts += 1;
-    if (solve && attempts <= solveFirst) issue?.(CAPTCHA_TOKEN);
-    else fail?.();
+    const answer =
+      solve && attempts <= solveFirst ? () => issue?.(tokenFor(attempts)) : () => fail?.();
+    if (deferred) pending.push(answer);
+    else answer();
   };
 
   globalThis.turnstile = {
@@ -40,6 +53,12 @@ function stubTurnstile({
     // Cloudflare hands back a new token after a reset; the form depends on it,
     // because a spent one cannot be verified twice.
     reset: attempt,
+  };
+
+  /** Releases whatever `deferred` is holding, from inside `act`. */
+  return () => {
+    const queued = pending.splice(0);
+    queued.forEach((answer) => answer());
   };
 }
 
@@ -274,7 +293,7 @@ describe('sending', () => {
       email: 'person@example.com',
       terms_consent: true,
       country: 'CA',
-      turnstile_token: CAPTCHA_TOKEN,
+      turnstile_token: tokenFor(1),
     });
   });
 
@@ -349,9 +368,64 @@ describe('resend', () => {
     confirmInDialog('Send again');
 
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
-    expect((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[1][0]).toBe(
-      '/api/campaigns/jfca-2026/entries/resend',
-    );
+    const calls = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls;
+    expect(calls[1][0]).toBe('/api/campaigns/jfca-2026/entries/resend');
+
+    // Two requests, two challenges. Sending the entry's token again would be
+    // refused by Cloudflare, and with a constant stub token it would have read
+    // exactly like success.
+    const sentToken = (call: unknown[]) =>
+      JSON.parse((call[1] as { body: string }).body).turnstile_token;
+    expect(sentToken(calls[0])).toBeTruthy();
+    expect(sentToken(calls[1])).not.toBe(sentToken(calls[0]));
+  });
+
+  it('keeps the action disabled until the challenge actually answers', async () => {
+    // The default stub answers inside `render`, so the disabled window never
+    // exists to be observed and asserting on it proves nothing. A deferred
+    // answer is what the visitor meets.
+    const answerChallenge = stubTurnstile({ deferred: true });
+    renderForm();
+
+    fireEvent.change(screen.getByLabelText(/Email address/), {
+      target: { value: 'person@example.com' },
+    });
+    fireEvent.click(agreementCheckbox());
+    // Nothing is sendable while Cloudflare has not answered, on this screen or
+    // in the dialog.
+    expect(screen.getByRole('button', { name: 'Send confirmation email' })).toBeDisabled();
+    act(() => answerChallenge());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send confirmation email' }));
+    confirmInDialog('Send email');
+    await screen.findByRole('heading', { name: 'Check your email' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send it again' }));
+    const dialog = await screen.findByRole('dialog');
+
+    const send = within(dialog).getByRole('button', { name: 'Send again' });
+    expect(send).toBeDisabled();
+    expect(dialog).toHaveTextContent(/Checking your browser/i);
+
+    act(() => answerChallenge());
+    await waitFor(() => expect(send).toBeEnabled());
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('will not open a second challenge while its own dialog is up', async () => {
+    renderForm();
+    await fillAndOpenDialog();
+    confirmInDialog('Send email');
+    await screen.findByRole('heading', { name: 'Check your email' });
+
+    const resend = screen.getByRole('button', { name: 'Send it again' });
+    fireEvent.click(resend);
+    await screen.findByRole('dialog');
+
+    // The backdrop covers this button, but iOS still aims the second half of a
+    // fast double-tap at the original target, and a second press would run a
+    // second challenge against the shared per-IP budget.
+    expect(resend).toBeDisabled();
   });
 
   it('will not resend on a challenge that failed, and still lets the visitor out', async () => {

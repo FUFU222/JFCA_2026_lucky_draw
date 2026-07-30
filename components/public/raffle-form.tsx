@@ -225,7 +225,11 @@ export function RaffleForm({
           {submitted.spam}
         </p>
         {resendNote && <p className="text-sm text-neutral-700">{resendNote}</p>}
-        {error && <p className="text-sm font-medium text-[#c8102e]">{error}</p>}
+        {error && (
+          <p role="alert" className="text-sm font-medium text-[#c8102e]">
+            {error}
+          </p>
+        )}
 
         {/*
           The captcha lives in the dialog below, not here. It has only ever
@@ -239,7 +243,12 @@ export function RaffleForm({
         */}
         <button
           type="button"
-          disabled={status === 'sending'}
+          // Also disabled while its own dialog is open. The backdrop covers
+          // it, but iOS aims the second half of a fast double-tap at the
+          // original target — and a second press bumps the round under a
+          // mounted widget, which runs a second challenge against the shared
+          // budget and can leave the earlier, now-invalid token in state.
+          disabled={status === 'sending' || dialog === 'resend'}
           onClick={() => {
             // A fresh challenge every time the dialog opens. A token left over
             // from a cancelled attempt is spendable for a few minutes and then
@@ -275,21 +284,28 @@ export function RaffleForm({
               challenge that overflows takes the buttons off the screen with
               it. */}
           {!isTestMode && (
-            <div className="overflow-x-auto">
-              <TurnstileWidget
-                siteKey={turnstileSiteKey}
-                resetKey={captchaRound}
-                onToken={(token) => {
-                  setCaptchaToken(token);
-                  if (token) setCaptchaFailed(false);
-                }}
-                onError={() => {
-                  setCaptchaToken(null);
-                  setCaptchaFailed(true);
-                }}
-              />
+            <div>
+              <div className="overflow-x-auto">
+                <TurnstileWidget
+                  siteKey={turnstileSiteKey}
+                  resetKey={captchaRound}
+                  onToken={(token) => {
+                    setCaptchaToken(token);
+                    if (token) setCaptchaFailed(false);
+                  }}
+                  onError={() => {
+                    setCaptchaToken(null);
+                    setCaptchaFailed(true);
+                  }}
+                />
+              </div>
+              {/* Outside the scroll box, or on a narrow screen the one line
+                  explaining what is happening scrolls off with the widget.
+                  Always rendered, never conditionally: a live region has to be
+                  in the document before its text changes, or the change is not
+                  announced at all. */}
               <p className="mt-2 text-sm text-neutral-600" role="status">
-                {captchaFailed ? t.captchaFailed : !captchaToken ? t.captchaPending : ''}
+                {captchaFailed ? t.captchaFailedInPlace : !captchaToken ? t.captchaPending : ''}
               </p>
             </div>
           )}

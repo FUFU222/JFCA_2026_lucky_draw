@@ -39,6 +39,11 @@ export const messages = {
 
     captchaPending: 'Checking your browser…',
     captchaFailed: 'That check did not pass. Reload the page and try again.',
+    // The same failure, told to somebody who must not reload. On the
+    // acknowledgement screen the saved draft is already cleared, so a reload
+    // lands them on an empty form with no way back to Send it again — and
+    // re-entering may be refused by the per-address limit.
+    captchaFailedInPlace: 'That check did not pass. Close this and try again.',
 
     errorEmail: 'Enter an email address you can open right now.',
     errorConsent: 'Please agree to the Privacy Policy and the Terms.',
