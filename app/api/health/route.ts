@@ -22,7 +22,15 @@ import { hasCronSecret } from '../../../lib/security/cron-auth';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request): Promise<NextResponse> {
-  const slug = new URL(request.url).searchParams.get('event') ?? ACTIVE_CAMPAIGN_SLUG;
+  const authorized = hasCronSecret(request);
+
+  // An anonymous caller always gets the active campaign, whatever they ask for.
+  // Honouring `?event=` for everyone would turn this into a way to find out
+  // which slugs exist — a rehearsal campaign answers differently from a
+  // fictional one — and would let a request for any other campaign land in the
+  // cache the monitor watching this one reads from.
+  const requested = new URL(request.url).searchParams.get('event');
+  const slug = authorized && requested ? requested : ACTIVE_CAMPAIGN_SLUG;
 
   let snapshot: Awaited<ReturnType<typeof collectHealth>>;
   try {
@@ -49,7 +57,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     accepting: snapshot.campaign.accepting,
   };
 
-  if (hasCronSecret(request)) {
+  if (authorized) {
     body.detail = {
       event: slug,
       campaignStatus: snapshot.campaign.status,

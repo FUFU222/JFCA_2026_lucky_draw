@@ -87,7 +87,7 @@ export function outboxBacklogThreshold(
 }
 
 const CACHE_TTL_MS = 10_000;
-let cached: { at: number; snapshot: HealthSnapshot } | null = null;
+let cached: { at: number; slug: string; snapshot: HealthSnapshot } | null = null;
 
 /**
  * Reads the snapshot, at most once every {@link CACHE_TTL_MS}.
@@ -95,13 +95,17 @@ let cached: { at: number; snapshot: HealthSnapshot } | null = null;
  * The endpoint is unauthenticated so that a free monitoring tier can reach it,
  * which means anyone can call it as fast as they like. The cache is what stops
  * that turning into database load.
+ *
+ * Keyed by slug, which is not a detail: a cache that ignored it would let a
+ * request for any other campaign serve its answer to the monitor watching this
+ * one, for the next ten seconds.
  */
 export async function collectHealth(slug: string, now = () => Date.now()): Promise<HealthSnapshot> {
   const nowMs = now();
-  if (cached && nowMs - cached.at < CACHE_TTL_MS) return cached.snapshot;
+  if (cached && cached.slug === slug && nowMs - cached.at < CACHE_TTL_MS) return cached.snapshot;
 
   const snapshot = await readSnapshot(slug, now);
-  cached = { at: nowMs, snapshot };
+  cached = { at: nowMs, slug, snapshot };
   return snapshot;
 }
 
