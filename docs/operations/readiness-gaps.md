@@ -262,17 +262,16 @@ is.
 ## Cleanups
 
 - **C1. The CSV export can truncate silently
-  ([#6](https://github.com/FUFU222/JFCA_2026_lucky_draw/issues/6), S2, worth
-  fixing before D).**
-  [app/admin/entries/export/route.ts](../../app/admin/entries/export/route.ts)
-  streams the file, so a failure part-way through arrives as a 200 with a short
-  file. The row count is already known and recorded in the audit log but is never
-  compared against what was written. The operator cannot tell a complete export
-  from a truncated one, and the export is the draw pool.
+  ([#6](https://github.com/FUFU222/JFCA_2026_lucky_draw/issues/6), fixed —
+  pending merge).** A trailing marker row plus a corrective
+  `EXPORT_CSV_INCOMPLETE` audit entry, since the response is already 200 with
+  the download headers sent before the first row streams. Neither the HTTP
+  status nor the filename can change after the fact; the file itself and the
+  audit trail are what's left to say so.
 - **C2. `hasCronSecret` exists twice
-  ([#7](https://github.com/FUFU222/JFCA_2026_lucky_draw/issues/7)).**
-  [lib/security/cron-auth.ts](../../lib/security/cron-auth.ts) and the copy inside
-  the outbox route. Deliberately not merged this close to the event; merge after.
+  ([#7](https://github.com/FUFU222/JFCA_2026_lucky_draw/issues/7), fixed —
+  pending merge).** The outbox route's own copy now imports
+  [lib/security/cron-auth.ts](../../lib/security/cron-auth.ts) instead.
 - **C3. No error-grouping dashboard
   ([#8](https://github.com/FUFU222/JFCA_2026_lucky_draw/issues/8)).**
   `@sentry/nextjs` could not be installed on
