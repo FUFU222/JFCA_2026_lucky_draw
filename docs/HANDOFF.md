@@ -28,7 +28,9 @@ and never says who won.
 - **Admin pages are Japanese only**, at `/admin`, restricted to `@chairman.jp`
   by Supabase magic link.
 - QR target: `https://luckydraw.livapon.com/jfca-2026`. Campaign `jfca-2026`,
-  Japan Festival Canada 2026, `America/Toronto`.
+  Japan Festival Canada 2026, `America/Toronto`. **The event is Saturday
+  15 August 2026** — a single day, which is why nothing here is built to run
+  unattended.
 - One case-insensitive address per campaign. Confirmation links expire in 24
   hours; at most 3 sends per token in 24 hours, 2 minutes apart.
 - **Intake is opened and closed by hand.** `opens_at` and `draw_starts_at` are

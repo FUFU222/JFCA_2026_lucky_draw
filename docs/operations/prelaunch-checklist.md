@@ -1,5 +1,9 @@
 # Lucky Draw pre-launch checklist
 
+**The event is Saturday 15 August 2026, in Toronto (`America/Toronto`).**
+Everything dated in this file is relative to that: the Resend teardown, the
+rate-limit request, and every "before the event" below.
+
 Work top to bottom. Nothing below the QR line may be skipped: once a code is
 printed, the URL it points at cannot be changed.
 
@@ -75,9 +79,16 @@ step in [on-site-runbook.md](on-site-runbook.md). Cancel by **2026-08-31**.
 - [ ] **Confirm a valid card is on file**, because that is what the automatic
       overage charge draws on. It is the one way the quota can actually stop
       the event: a declined card and the pause is not about volume any more.
-- [ ] **Ask Resend to raise the API rate limit.** The default is **10 requests
-      per second per team** (Settings → Usage shows the team's current value —
-      read it there rather than assuming). It does not vary by plan.
+- [ ] **Ask Resend to raise the API rate limit.** Requested 2026-07-30,
+      awaiting a reply. **Read on Settings → Usage that day: 10 req/s**, the
+      default, on Pro — so this is measured rather than assumed, and it does
+      not vary by plan. Check that page again to confirm when it is granted.
+
+      Sent through Settings → Usage → the help panel → **Talk to an expert**,
+      at priority **Medium**. Not Critical: nothing is down, and mislabelling a
+      planned request as an incident works against you with the team whose
+      discretion you are asking for. Chase it if three working days pass with
+      no reply — this cannot be fixed on the day.
 
       **This is the opposite of the plan tier above, and it is why it has to
       be done in advance.** The quota is soft, self-serve and reversible; the
