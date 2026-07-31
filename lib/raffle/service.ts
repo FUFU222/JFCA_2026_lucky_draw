@@ -483,15 +483,17 @@ export class RaffleService {
    * Returns which bucket refused the request — `'ip'` or `'email'` — or `null`
    * if both allowed it, so the caller can tell a visitor the true cause
    * rather than a single generic "too many attempts".
+   *
+   * The IP bucket is checked first and the checks are sequential: a caller
+   * already blocked at the network level must not also spend the address
+   * bucket, so a shared, easily-exhausted venue IP cannot burn through every
+   * address behind it.
    */
   private async consumeRequestAllowance(
     eventSlug: string,
     email: string,
     ipAddress: string | undefined,
   ): Promise<'ip' | 'email' | null> {
-    // The address limit is consumed first and the checks are sequential: an
-    // address that is already over its limit must not be able to keep creating
-    // per-address buckets, and a blocked caller must not burn a shared bucket.
     const limits = this.dependencies.limits ?? {
       email: emailRequestLimit(),
       ip: ipRequestLimit(),
@@ -516,9 +518,8 @@ export class RaffleService {
    * A separate bucket pair from {@link consumeRequestAllowance}, on the same
    * IP and address axes but never sharing a key with it: a burst of lookups
    * must not spend the allowance a real entrant needs to submit or resend,
-   * and the reverse.
+   * and the reverse. Returns the same `'ip' | 'email' | null` shape.
    */
-  /** Same `'ip' | 'email' | null` shape as {@link consumeRequestAllowance}. */
   private async consumeLookupAllowance(
     eventSlug: string,
     email: string,
