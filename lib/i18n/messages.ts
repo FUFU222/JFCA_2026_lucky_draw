@@ -49,6 +49,11 @@ export const messages = {
     errorGeneric: 'Something went wrong. Please try again.',
     errorRateLimited:
       'Too many attempts from this network. Ask a member of staff for help, or try again from mobile data.',
+    // Distinct from the network message above on purpose: switching networks
+    // does nothing for this one, since the limit follows the address, not the
+    // connection.
+    errorRateLimitedAddress:
+      'This address has already requested several confirmation emails today. Wait a while and try again, or ask a member of staff for help.',
     errorClosed: 'Entries are not open at the moment.',
     // Test mode only, so this one is read by an operator rather than a visitor.
     errorTestAddressInUse:
@@ -138,6 +143,10 @@ export const messages = {
     // yet", on purpose — see `RaffleService.lookupNumber`.
     notFound: 'No ready number for that address yet. Check your confirmation email, or ask a staff member for help.',
     errorRateLimited: 'Too many attempts from this network. Ask a member of staff for help, or try again from mobile data.',
+    // See the same key under `form` — the address-level limit needs its own
+    // wording because switching networks will not help this one.
+    errorRateLimitedAddress:
+      'This address has already been checked several times today. Try again later, or ask a member of staff for help.',
     errorGeneric: 'Something went wrong. Please try again.',
   },
 

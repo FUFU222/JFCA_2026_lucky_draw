@@ -192,6 +192,8 @@ function errorFor(code: string | undefined, status: number): string {
       return messages.form.captchaFailed;
     case 'try_again_later':
       return t.errorRateLimited;
+    case 'try_again_later_address':
+      return t.errorRateLimitedAddress;
     default:
       return status === 429 ? t.errorRateLimited : t.errorGeneric;
   }

@@ -104,6 +104,17 @@ describe('NumberLookupForm', () => {
     await screen.findByText(/Too many attempts from this network/);
   });
 
+  it('tells the visitor to wait, not to switch networks, when the address itself is rate-limited', async () => {
+    respondWith({ ok: false, error: 'try_again_later_address' }, 429);
+    renderForm();
+
+    fillEmail();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Find my number' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Find my number' }));
+
+    await screen.findByText(/already been checked several times today/);
+  });
+
   it('sends no captcha token and renders no widget in test mode', async () => {
     respondWith({ ok: true, found: true, number: '900000001' });
     renderForm({ isTestMode: true });

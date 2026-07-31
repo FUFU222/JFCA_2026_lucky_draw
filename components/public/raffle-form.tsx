@@ -650,6 +650,8 @@ function errorFor(code: string | undefined, status: number, t: typeof messages.f
       return t.captchaFailed;
     case 'try_again_later':
       return t.errorRateLimited;
+    case 'try_again_later_address':
+      return t.errorRateLimitedAddress;
     case 'registration_unavailable':
       return t.errorClosed;
     case 'invalid_request':

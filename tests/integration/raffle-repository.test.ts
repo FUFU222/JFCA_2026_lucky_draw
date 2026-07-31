@@ -959,7 +959,7 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
         turnstileToken: 'captcha',
         ipAddress: '203.0.113.99',
       }),
-    ).resolves.toEqual({ found: false, reason: 'rate_limited' });
+    ).resolves.toEqual({ found: false, reason: 'rate_limited_address' });
 
     // The entry form's own allowance is untouched: a sixth real submission
     // from this address is refused for an unrelated reason (already
