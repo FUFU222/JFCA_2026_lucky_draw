@@ -80,6 +80,11 @@ export function SaveableTicket({ number, eventTitle }: { number: bigint; eventTi
           preload.decode().catch(() => {}),
           new Promise((resolve) => setTimeout(resolve, 200)),
         ]);
+        // Releases `preload` once the race is settled either way, so a decode
+        // that never resolves does not pin this throwaway Image for the rest
+        // of the page's life — the failure mode the race exists to survive,
+        // not merely to hide.
+        preload.src = '';
         if (cancelled) return;
 
         setSaved(url);
