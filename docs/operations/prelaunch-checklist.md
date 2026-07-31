@@ -80,35 +80,34 @@ step in [on-site-runbook.md](on-site-runbook.md). Cancel by **2026-08-31**.
       overage charge draws on. It is the one way the quota can actually stop
       the event: a declined card and the pause is not about volume any more.
       Confirmed 2026-07-30, on Pro.
-- [ ] **Ask Resend to raise the API rate limit.** Requested 2026-07-30,
-      awaiting a reply. **Read on Settings → Usage that day: 10 req/s**, the
-      default, on Pro — so this is measured rather than assumed, and it does
-      not vary by plan. Check that page again to confirm when it is granted.
+- [x] **Ask Resend to raise the API rate limit.** Requested 2026-07-30,
+      **granted the same day at 25 req/s** — half of the 50 asked for, and
+      accepted rather than chased further; see the reasoning below.
 
       Sent through Settings → Usage → the help panel → **Talk to an expert**,
-      at priority **Medium**. Not Critical: nothing is down, and mislabelling a
-      planned request as an incident works against you with the team whose
-      discretion you are asking for. Chase it if three working days pass with
-      no reply — this cannot be fixed on the day.
+      at priority Medium. Turnaround was under an hour.
 
-      **This is the opposite of the plan tier above, and it is why it has to
-      be done in advance.** The quota is soft, self-serve and reversible; the
-      rate limit is a hard 429, cannot be changed from the dashboard, and
-      needs a human at Resend support to grant it. There is no version of
-      raising it at two in the afternoon with a queue at the booth.
+      **Why 25 is enough, not just what was offered.** 30,000 entrants over a
+      seven-hour day, two messages each (today's architecture — see the
+      receipt-email item elsewhere in this file for the pending change to
+      one), average ~2.4 req/s; a generous 3-4x arrival peak puts the booth at
+      7-10 req/s. 25 req/s leaves 2.6-3.5x headroom over that peak, not a
+      ceiling with no margin the way the 10 req/s default was. The original
+      ask of 50 was deliberately padded past the realistic peak precisely
+      because the granted number was unknown; now that it is known and
+      already comfortable, squeezing for the rest returns little for the
+      goodwill and time it costs a small support team. Re-open this if the
+      receipt-email removal does *not* land before the event — that change
+      roughly halves the volume and widens the margin further, so its absence
+      is the one thing that would call for asking again.
 
-      **Ask for 50/s.** Both messages are sent inline as visitors arrive, so
-      30,000 entrants across a seven-hour day averages only ~2.4/s — but that
-      is the average. Festival arrivals cluster, and a three-to-four-times
-      peak puts the booth at 7–10/s, i.e. at the default ceiling with no
-      margin at the exact moment a queue is forming.
-
-      What makes this worth over-asking for: a 429 is not handled specially
-      anywhere in the mail layer. It is an ordinary failure, so the message
-      falls to `email_outbox` and waits for the retry worker — which asks for
-      five minutes and really runs about every 88. The visitor standing at the
-      booth gets nothing, and their own **Send it again** hits the same
-      ceiling. The rate limit is the critical path here, not a backstop.
+      **Declined the suggested Batch endpoint** (up to 100 messages per API
+      call). It does not fit how mail is sent here: each message is triggered
+      by one visitor's real action and sent inline at that instant — mail is
+      "inline first, durable second" by design (see HANDOFF.md), specifically
+      to avoid queuing delay. Batching would mean holding messages to
+      accumulate a batch, which is the delay this architecture exists to
+      avoid, for a rate-limit problem 25 req/s already solves.
 - [x] **Verify the sending domain for `info@chairman.jp`.** Checked against
       live DNS on 2026-07-30, not against the dashboard's own status:
 
