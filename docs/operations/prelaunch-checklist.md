@@ -76,9 +76,10 @@ step in [on-site-runbook.md](on-site-runbook.md). Cancel by **2026-08-31**.
 
       So: stay on 50K, watch the number during the day, and move up only if
       the volume genuinely arrives. The whole downside of guessing low is $9.
-- [ ] **Confirm a valid card is on file**, because that is what the automatic
+- [x] **Confirm a valid card is on file**, because that is what the automatic
       overage charge draws on. It is the one way the quota can actually stop
       the event: a declined card and the pause is not about volume any more.
+      Confirmed 2026-07-30, on Pro.
 - [ ] **Ask Resend to raise the API rate limit.** Requested 2026-07-30,
       awaiting a reply. **Read on Settings → Usage that day: 10 req/s**, the
       default, on Pro — so this is measured rather than assumed, and it does
@@ -108,8 +109,29 @@ step in [on-site-runbook.md](on-site-runbook.md). Cancel by **2026-08-31**.
       five minutes and really runs about every 88. The visitor standing at the
       booth gets nothing, and their own **Send it again** hits the same
       ceiling. The rate limit is the critical path here, not a backstop.
-- [ ] Verify the sending domain for `info@chairman.jp`: SPF and DKIM records
-      published, and DMARC checked if the domain has a policy.
+- [x] **Verify the sending domain for `info@chairman.jp`.** Checked against
+      live DNS on 2026-07-30, not against the dashboard's own status:
+
+      - `resend._domainkey.chairman.jp` — DKIM public key published, so the
+        signature carries `d=chairman.jp` and aligns with the From domain.
+      - `send.chairman.jp` — `v=spf1 include:amazonses.com ~all` plus an MX to
+        `feedback-smtp.us-east-1.amazonses.com`. This is the Return-Path
+        domain, and it is the one SPF is actually evaluated against.
+      - `chairman.jp` root SPF is `include:_spf.google.com` only, and **that is
+        correct — do not add amazonses to it.** SPF authenticates the envelope
+        sender, which is `send.chairman.jp`, not the From header. Adding SES to
+        the root would authorise Resend to send as ordinary company mail for no
+        benefit.
+      - DMARC is `p=none` with `rua=mailto:postmaster@chairman.jp`. Monitoring
+        only, which is the right setting to be sending 60,000 messages under:
+        nothing legitimate can be rejected by our own policy.
+- [ ] **Fix the leading tab in the DMARC record.** The published value is
+      `\009v=DMARC1; p=none; ...` — a literal tab before the version tag. A
+      DMARC record has to begin with `v=DMARC1`; some evaluators trim leading
+      whitespace and some do not, so this is a coin flip on whether the policy
+      is seen at all. It costs one edit. DNS for `chairman.jp` is at
+      Squarespace, not in any GCP project despite the googledomains
+      nameservers. Re-check with `dig +short TXT _dmarc.chairman.jp`.
 - [ ] Send one test message to a Gmail address and one to an Outlook address, and
       confirm both land outside spam.
 - [ ] Confirm the sender renders as `LIVAPON <info@chairman.jp>`.
