@@ -515,10 +515,7 @@ export function RaffleForm({
             checked={draft.marketing}
             onChange={(event) => set('marketing', event.target.checked)}
           />
-          <span>
-            {t.marketing}
-            <span className="mt-0.5 block text-sm text-neutral-500">{t.marketingOptional}</span>
-          </span>
+          <span>{t.marketing}</span>
         </label>
 
         {!isTestMode && (

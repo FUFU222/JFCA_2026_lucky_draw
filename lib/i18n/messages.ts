@@ -33,7 +33,6 @@ export const messages = {
     // commercial email has to be its own affirmative act. Unticked is the
     // default a visitor gets by doing nothing.
     marketing: 'Also send me LIVAPON news and offers by email. You can unsubscribe at any time.',
-    marketingOptional: 'Optional — you get your number either way',
     submit: 'Send confirmation email',
     submitting: 'Sending…',
 
