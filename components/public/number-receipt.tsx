@@ -58,7 +58,6 @@ export function NumberReceipt({ number, eventTitle }: { number: bigint; eventTit
         <SaveableTicket number={number} eventTitle={eventTitle} />
       </div>
 
-      <p className="text-[15px] leading-relaxed text-neutral-800">{t.saveHint}</p>
       <p className="text-[15px] leading-relaxed text-neutral-800">{t.venue}</p>
 
       <div className="space-y-2 border-t border-neutral-200 pt-6 text-sm text-neutral-600">

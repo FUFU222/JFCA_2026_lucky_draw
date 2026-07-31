@@ -152,6 +152,16 @@ export function SaveableTicket({ number, eventTitle }: { number: bigint; eventTi
           {t.save}
         </a>
       ) : null}
+
+      {/*
+        Styled as a caption of the button above, not a standalone sentence —
+        it reads as confirming *how* to keep the number, not as one more fact
+        competing with it for attention. Rendered unconditionally rather than
+        only alongside the button: on the no-canvas fallback path there is no
+        button at all, and this line is the only place a screenshot is ever
+        suggested.
+      */}
+      <p className="text-sm text-neutral-500">{t.saveHint}</p>
     </div>
   );
 }

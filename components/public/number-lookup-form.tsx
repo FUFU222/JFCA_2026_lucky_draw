@@ -96,7 +96,15 @@ export function NumberLookupForm({
   }
 
   if (result.state === 'found') {
-    return <SaveableTicket number={result.number} eventTitle={eventTitle} />;
+    return (
+      <div className="space-y-5">
+        <SaveableTicket number={result.number} eventTitle={eventTitle} />
+        {/* Same fact, same importance as on the page reached right after
+            confirming — a visitor arriving here by lookup instead has no
+            less reason to know it. */}
+        <p className="text-[15px] leading-relaxed text-neutral-800">{messages.receipt.venue}</p>
+      </div>
+    );
   }
 
   return (
