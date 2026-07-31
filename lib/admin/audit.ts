@@ -5,6 +5,11 @@ import { createServiceRoleClient } from '../db/server';
 export type AuditAction =
   | 'ADMIN_LOGIN'
   | 'EXPORT_CSV'
+  // Written only when the streamed row count fell short of what EXPORT_CSV
+  // promised — see app/admin/entries/export/route.ts. A second, corrective
+  // record rather than an edit to the first: the request that was made is
+  // still true, this is what actually happened.
+  | 'EXPORT_CSV_INCOMPLETE'
   | 'PAUSE_REGISTRATION'
   | 'RESUME_REGISTRATION'
   | 'START_REGISTRATION'
