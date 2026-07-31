@@ -81,7 +81,43 @@ the server log, which is how you walk the journey without a mailbox.
 6. Sign in at `/admin/login` and check the entry appears, then export the CSV
    and open it in Excel.
 
-## Load test
+## Load test — not run for this event, and why that is a reasoned call
+
+The HTTP-level run below still works as documented, but for this event it was
+judged unnecessary rather than skipped for lack of time. Written down so a
+later reader does not mistake "not run" for "forgotten":
+
+- The property a load test would prove — no duplicate numbers — is a
+  structural guarantee, not an empirical one. Numbers are issued inside
+  `confirm_raffle_verification`, which locks the campaign row with
+  `select ... for update` before incrementing the counter. Postgres serialises
+  writers to that row regardless of how many arrive at once; that does not
+  become more true by sampling it at N=100 rather than N=2.
+- That guarantee is exercised directly instead.
+  **`tests/integration/raffle-repository.test.ts`** has "issues N distinct
+  sequential numbers to N distinct entrants confirming at once, with no
+  duplicates" — 80 concurrent confirmations, asserting the result is exactly
+  `{10000, ..., 10000+79}` with no gaps or repeats. It runs against the same
+  local Supabase the rest of the suite uses, so it costs nothing and needs no
+  infrastructure. 80 concurrent confirmations completed in 185ms in one run —
+  not a benchmark, but evidence the lock is not visibly stalling.
+- What an HTTP-level run adds on top is *latency and infra-limit* coverage —
+  Vercel concurrency, Supabase's connection pool — under a rate this event
+  will not produce. 30,000 entrants over seven hours, with the receipt email
+  removed, averages under 5 req/s; even a generous 3-4x arrival peak stays in
+  the single digits. 100 req/s sustained for 30 seconds was written into the
+  original plan as a generic acceptance target, not calibrated to this
+  event's actual ceiling.
+- Setting it up also meant standing up a second cloud Supabase project, which
+  the organisation's Free-tier 2-project limit refused outright (confirmed
+  2026-07-30). Working around that meant pausing another live project or
+  paying for a Pro-tier project for a single test run — real cost and real
+  disruption elsewhere, for a question the concurrency test above already
+  answers for the one property that matters.
+
+If a future event's expected volume is materially larger — sustained tens of
+requests per second rather than single digits — redo this calculation rather
+than assuming it still holds, and run the test below.
 
 The acceptance target is 100 verification requests per second sustained, with no
 server errors, no duplicate numbers, and a controlled 429 for traffic over the

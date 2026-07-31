@@ -647,6 +647,61 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
     ).resolves.toBeNull();
   });
 
+  it('issues N distinct sequential numbers to N distinct entrants confirming at once, with no duplicates', async () => {
+    // Not the same property as the two tests above, which race repeats of one
+    // link or one address against themselves. This is the property a load
+    // test would actually be checking: many different people hitting the same
+    // counter at the same instant. `confirm_raffle_verification` locks the
+    // campaign row with `select ... for update`, which is a structural
+    // guarantee from Postgres that writers to that row serialize regardless of
+    // how many arrive at once — this does not prove it holds at N=80 by
+    // sampling, it demonstrates the same mechanism that holds at any N, well
+    // past the concurrency this event will ever see.
+    const CONCURRENCY = 80;
+    const campaign = await createOpenCampaign();
+    const mailer = new FakeMailer();
+    const service = buildService(mailer);
+
+    await Promise.all(
+      Array.from({ length: CONCURRENCY }, (_, index) =>
+        service.requestVerification({
+          eventSlug: campaign.slug,
+          email: `burst-${index}-${uniqueSuffix()}@example.com`,
+          termsConsent: true,
+          turnstileToken: 'captcha',
+        }),
+      ),
+    );
+
+    expect(mailer.verification).toHaveLength(CONCURRENCY);
+    const started = performance.now();
+    const results = await Promise.all(
+      mailer.verification.map(({ token }) => service.confirmVerification({ eventSlug: campaign.slug, token })),
+    );
+    const elapsedMs = performance.now() - started;
+
+    const numbers = results.map((result) => result?.number);
+    expect(numbers.every((number) => number !== undefined)).toBe(true);
+    // A Set collapses duplicates; if the lock had ever let two confirmations
+    // read the counter before either wrote it back, this length would be
+    // short of CONCURRENCY.
+    expect(new Set(numbers).size).toBe(CONCURRENCY);
+    expect([...numbers].sort((a, b) => Number(a) - Number(b))).toEqual(
+      Array.from({ length: CONCURRENCY }, (_, index) => BigInt(10_000 + index)),
+    );
+
+    const { data: campaignAfter } = await supabase
+      .from('campaigns')
+      .select('next_number')
+      .eq('id', campaign.id)
+      .single();
+    expect(campaignAfter?.next_number).toBe(10_000 + CONCURRENCY);
+
+    // Not a benchmark — one process, one machine, no network hop — but a
+    // sanity check that the lock is not serialising into a visible stall.
+    console.info(`[load-substitute] ${CONCURRENCY} concurrent confirmations in ${elapsedMs.toFixed(0)}ms`);
+  });
+
   it('lets one of two concurrent first submissions win without failing the other', async () => {
     const campaign = await createOpenCampaign();
     const mailer = new FakeMailer();

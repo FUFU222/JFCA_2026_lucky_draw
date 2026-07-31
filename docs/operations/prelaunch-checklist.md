@@ -193,8 +193,16 @@ step in [on-site-runbook.md](on-site-runbook.md). Cancel by **2026-08-31**.
       person; leave it alone. A value that will not parse is refused at boot
       rather than falling back to the default, so a typo here is a failed
       deploy instead of a venue locked out mid-event.
-- [ ] Run the load test **without** raising the limit further, so it measures
-      what the venue will actually experience.
+- [x] **The HTTP-level load test was not run — a reasoned decision, not a gap.**
+      See [staging.md](staging.md#load-test--not-run-for-this-event-and-why-that-is-a-reasoned-call)
+      for the full reasoning. In short: the property it exists to prove is
+      structurally guaranteed by a row lock, not empirically, and is now
+      exercised directly at 80-way concurrency in
+      `tests/integration/raffle-repository.test.ts`, at zero cost; the event's
+      actual traffic ceiling is nowhere near the test's 100 req/s target; and
+      the Free-tier 2-project limit made standing up a second cloud Supabase
+      project cost real money or disrupt another live project for a question
+      already answered. Decided 2026-07-30.
 
 ## 5. Legal and content
 
