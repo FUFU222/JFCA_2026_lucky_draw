@@ -3,7 +3,6 @@ import { NextResponse } from 'next/server';
 import { ACTIVE_CAMPAIGN_SLUG } from '../../../lib/campaign/config';
 import { collectHealth, evaluateHealth, outboxBacklogThreshold } from '../../../lib/observability/health';
 import { hasCronSecret } from '../../../lib/security/cron-auth';
-import { clientIpAddress } from '../campaigns/_shared';
 
 /**
  * The endpoint an external monitor polls. See docs/operations/monitoring.md for
@@ -72,11 +71,6 @@ export async function GET(request: Request): Promise<NextResponse> {
       // fails: installed, never configured, nobody notices until it is needed.
       errorAlerts: snapshot.errorTrackingEnabled ? 'on' : 'off',
       reasons: verdict.reasons,
-      // TEMPORARY — readiness-gaps.md R3 / issue #3: confirms whether Vercel
-      // overwrites x-real-ip / x-forwarded-for on ingress, by showing what the
-      // rate limiter would actually key on for this request. Revert once
-      // that's verified; it does not belong in the endpoint long-term.
-      resolvedClientIp: clientIpAddress(request),
     };
   }
 
