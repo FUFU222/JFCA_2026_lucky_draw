@@ -221,6 +221,25 @@ read-only smoke suite against a deployed origin.
 
 Not worth changing before the event. Worth doing before this code is reused.
 
+### P6. `/api/health`'s caching only holds within one warm instance (S3, worth a look if traffic to it looks odd)
+
+Found in review, 2026-07-30. The endpoint is public and unauthenticated on
+purpose — see [monitoring.md](monitoring.md) — and its ten-second snapshot
+cache is a plain module-level variable. That only protects one warm process.
+Vercel runs several concurrently, so a burst of requests — an aggressively
+configured monitor, or anyone who finds the URL and loops `curl` against it —
+lands on multiple instances at once, each with its own empty cache, each
+issuing its own read against the same database the numbering RPC depends on
+for correctness under concurrency.
+
+In practice the two queries behind it are indexed lookups (`campaigns` by
+`slug`, a counted `email_outbox` join), not table scans, and a single
+reasonably-configured external monitor is nowhere near enough to matter. Not
+fixed now: a real fix means a shared limiter — edge middleware or a KV-backed
+token bucket — which is new infrastructure to introduce and verify two weeks
+out. Revisit if traffic to `/api/health` ever looks like more than one caller,
+or before this pattern is reused somewhere with less headroom.
+
 ## Accepted risks
 
 Recorded rather than fixed. Each one is a decision, and the reason is the part
