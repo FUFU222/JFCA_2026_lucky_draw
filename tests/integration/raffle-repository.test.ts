@@ -916,7 +916,19 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
   it('enforces the per-address lookup limit against real Postgres, in a bucket the entry form never touches', async () => {
     const campaign = await createOpenCampaign();
     const mailer = new FakeMailer();
-    const service = buildService(mailer);
+    // Not `buildService`: `lookupLimits` is pinned explicitly here rather than
+    // left to fall back to `process.env.RAFFLE_LOOKUP_EMAIL_REQUEST_LIMIT`, so
+    // this test keeps proving what it says regardless of whatever a future
+    // `.env.test.local` or CI secret happens to set that variable to.
+    const service = new RaffleService({
+      repository: new SupabaseRaffleRepository(supabase),
+      mailer,
+      turnstile: { verify: async () => true },
+      rateLimiter: new SupabaseRateLimiter(supabase),
+      verificationTokenSecret: VERIFICATION_SECRET,
+      receiptTokenSecret: RECEIPT_SECRET,
+      lookupLimits: { email: 5, ip: 1000 },
+    });
     const email = `lookup-limit-${uniqueSuffix()}@example.com`;
 
     await service.requestVerification({
@@ -928,7 +940,7 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
     await service.confirmVerification({ eventSlug: campaign.slug, token: mailer.verification[0].token });
 
     // Five distinct-IP lookups succeed — proves the address bucket, not the
-    // (generous, 1000/day) IP bucket, is what caps this at the default of 5.
+    // (pinned, 1000/day) IP bucket, is what caps this at the pinned 5.
     for (let attempt = 0; attempt < 5; attempt += 1) {
       await expect(
         service.lookupNumber({

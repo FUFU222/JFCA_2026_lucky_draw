@@ -63,6 +63,27 @@ describe('assertRaffleConfiguration', () => {
     ).toThrow('RAFFLE_EMAIL_REQUEST_LIMIT must be a positive integer');
   });
 
+  it('applies the same guard to the lookup feature\'s own pair of limits', () => {
+    expect(() =>
+      assertRaffleConfiguration(
+        { ...productionEnv, RAFFLE_LOOKUP_IP_REQUEST_LIMIT: '1000' },
+        true,
+      ),
+    ).not.toThrow();
+    expect(() =>
+      assertRaffleConfiguration(
+        { ...productionEnv, RAFFLE_LOOKUP_IP_REQUEST_LIMIT: 'lots' },
+        true,
+      ),
+    ).toThrow('RAFFLE_LOOKUP_IP_REQUEST_LIMIT must be a positive integer');
+    expect(() =>
+      assertRaffleConfiguration(
+        { ...productionEnv, RAFFLE_LOOKUP_EMAIL_REQUEST_LIMIT: '0' },
+        true,
+      ),
+    ).toThrow('RAFFLE_LOOKUP_EMAIL_REQUEST_LIMIT must be a positive integer');
+  });
+
   it('catches a missing anon key, which otherwise only surfaces at an operator sign-in', () => {
     expect(() =>
       assertRaffleConfiguration({ ...productionEnv, NEXT_PUBLIC_SUPABASE_ANON_KEY: '' }, true),

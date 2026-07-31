@@ -3,6 +3,14 @@ import { NextResponse } from 'next/server';
 import { getRaffleService } from '../../../../../lib/db/server';
 import { clientIpAddress, invalidRequest, readJsonObject } from '../../_shared';
 
+/**
+ * Declared rather than left to the platform default of 10-15 seconds, same as
+ * every other public write: this path calls Cloudflare, and a request killed
+ * mid-call after the lookup allowance is already consumed spends one of a
+ * visitor's five daily attempts without ever answering.
+ */
+export const maxDuration = 30;
+
 export async function POST(request: Request, context: { params: Promise<{ eventSlug: string }> }) {
   const body = await readJsonObject(request);
   if (!body) return invalidRequest();
