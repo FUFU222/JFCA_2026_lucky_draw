@@ -134,8 +134,13 @@ step in [on-site-runbook.md](on-site-runbook.md). Cancel by **2026-08-31**.
       Confirmed clean against all four authoritative nameservers
       (`ns-cloud-c{1..4}.googledomains.com`) — DNS for `chairman.jp` is at
       Squarespace, not in any GCP project, despite those nameserver names.
-- [ ] Send one test message to a Gmail address and one to an Outlook address, and
-      confirm both land outside spam.
+- [x] **Gmail and iCloud confirmed landing outside spam**, 2026-07-30 —
+      repeated real sends, not a one-off. **Outlook was not tested**: a
+      decision to skip it and accept the risk, made 2026-07-30 rather than a
+      gap nobody noticed. Worth revisiting only if time allows before the
+      event; if an Outlook entrant reports missing mail on the day, the
+      remedy is the same as a mistyped address — spam folder, then the
+      operator looks the entry up in 応募一覧.
 - [ ] Confirm the sender renders as `LIVAPON <info@chairman.jp>`.
 
 ## 3. Cloudflare Turnstile
