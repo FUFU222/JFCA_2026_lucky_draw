@@ -125,13 +125,15 @@ step in [on-site-runbook.md](on-site-runbook.md). Cancel by **2026-08-31**.
       - DMARC is `p=none` with `rua=mailto:postmaster@chairman.jp`. Monitoring
         only, which is the right setting to be sending 60,000 messages under:
         nothing legitimate can be rejected by our own policy.
-- [ ] **Fix the leading tab in the DMARC record.** The published value is
-      `\009v=DMARC1; p=none; ...` — a literal tab before the version tag. A
-      DMARC record has to begin with `v=DMARC1`; some evaluators trim leading
-      whitespace and some do not, so this is a coin flip on whether the policy
-      is seen at all. It costs one edit. DNS for `chairman.jp` is at
-      Squarespace, not in any GCP project despite the googledomains
-      nameservers. Re-check with `dig +short TXT _dmarc.chairman.jp`.
+- [x] **Fixed the leading tab in the DMARC record**, 2026-07-30. The
+      published value had a literal tab before `v=DMARC1`, which some
+      evaluators trim and some do not — a coin flip on whether the policy was
+      seen at all. **Editing the record in place did not remove it**;
+      Squarespace's editor appears to insert one on save regardless of what
+      is typed. Deleting the record and recreating it from scratch did.
+      Confirmed clean against all four authoritative nameservers
+      (`ns-cloud-c{1..4}.googledomains.com`) — DNS for `chairman.jp` is at
+      Squarespace, not in any GCP project, despite those nameserver names.
 - [ ] Send one test message to a Gmail address and one to an Outlook address, and
       confirm both land outside spam.
 - [ ] Confirm the sender renders as `LIVAPON <info@chairman.jp>`.
