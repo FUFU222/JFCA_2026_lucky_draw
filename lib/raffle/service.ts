@@ -3,9 +3,16 @@ import { randomUUID } from 'node:crypto';
 import { isRegistrationOpen } from '../campaign/config';
 import type { Campaign, RaffleEntry } from '../db/types';
 import { deriveReceiptToken, deriveVerificationToken, hashToken } from './tokens';
-import { RATE_LIMIT_WINDOW_SECONDS, emailRequestLimit, ipRequestLimit } from './limits';
+import {
+  RATE_LIMIT_WINDOW_SECONDS,
+  emailRequestLimit,
+  ipRequestLimit,
+  lookupEmailRequestLimit,
+  lookupIpRequestLimit,
+} from './limits';
 import {
   confirmRequestSchema,
+  lookupRequestSchema,
   resendRequestSchema,
   verificationRequestSchema,
 } from './validation';
@@ -142,6 +149,19 @@ export type RaffleRequestResult =
       reason: 'invalid' | 'closed' | 'rate_limited' | 'turnstile' | 'test_address_conflict';
     };
 
+/**
+ * "Find my number": deliberately not shaped like {@link RaffleRequestResult}.
+ * That type never discloses whether accepting means anything happened, on
+ * purpose — this one exists specifically to disclose a number, so `found`
+ * carries the number rather than hiding behind a uniform acceptance. What it
+ * still will not disclose is the difference between "no such address" and
+ * "registered but not verified yet" — both answer `not_found`, so a lookup
+ * cannot be used to learn who has entered but not yet confirmed.
+ */
+export type RaffleLookupResult =
+  | { found: true; number: bigint }
+  | { found: false; reason?: 'invalid' | 'rate_limited' | 'turnstile' };
+
 export interface RaffleServiceDependencies {
   repository: RaffleRepository;
   mailer: RaffleMailer;
@@ -153,6 +173,12 @@ export interface RaffleServiceDependencies {
   onDeliveryError?: (error: unknown) => void;
   /** Defaults come from the environment; tests inject them directly. */
   limits?: { email: number; ip: number };
+  /**
+   * A separate bucket pair from `limits`, on purpose — see the comment on
+   * `lookupIpRequestLimit`. Defaults come from the environment; tests inject
+   * them directly.
+   */
+  lookupLimits?: { email: number; ip: number };
   /**
    * Re-verifies an `isTest` claim against a real, current operator session.
    * A request that claims test mode without this resolving `true` is always
@@ -337,6 +363,51 @@ export class RaffleService {
     return { accepted: true };
   }
 
+  /**
+   * "Find my number": discloses the number for a VERIFIED entry to whoever
+   * holds the address, no proof of ownership beyond that. Decided and
+   * accepted 2026-07-31 in place of emailing the number back, to avoid a
+   * second message per lookup — see the register entry for the full
+   * reasoning and the two rate limits that are its only backstop.
+   *
+   * Deliberately does not check `isRegistrationOpen`. A visitor who needs
+   * this is most likely to need it around the draw itself — after intake has
+   * closed and before results are announced — which is exactly the window a
+   * schedule check would have refused it in.
+   */
+  async lookupNumber(input: unknown): Promise<RaffleLookupResult> {
+    const parsed = lookupRequestSchema.safeParse(input);
+    if (!parsed.success) return { found: false, reason: 'invalid' };
+    const request = parsed.data;
+
+    const isTest = request.isTest === true && (await this.verifiedOperatorTestMode());
+
+    if (!isTest) {
+      if (!request.turnstileToken) return { found: false, reason: 'invalid' };
+      if (!(await this.dependencies.turnstile.verify(request.turnstileToken, request.ipAddress))) {
+        return { found: false, reason: 'turnstile' };
+      }
+    }
+
+    const campaign = await this.dependencies.repository.getCampaignBySlug(request.eventSlug);
+    // An unknown event answers exactly like an address with no entry: there is
+    // no further distinction worth drawing, and none that would not cost an
+    // extra database round trip to make.
+    if (!campaign) return { found: false };
+
+    if (!isTest && !(await this.consumeLookupAllowance(request.eventSlug, request.email, request.ipAddress))) {
+      return { found: false, reason: 'rate_limited' };
+    }
+
+    // The one thing this must not disclose beyond the accepted risk: whether
+    // an address has entered but not yet confirmed. Both answer `found: false`
+    // with no reason, identically to an address that never entered at all.
+    const entry = await this.dependencies.repository.findEntryByEmail(campaign.id, request.email);
+    if (!entry || entry.state !== 'VERIFIED' || entry.number === null) return { found: false };
+
+    return { found: true, number: BigInt(entry.number) };
+  }
+
   async confirmVerification(
     input: unknown,
   ): Promise<{ number: bigint; receiptToken: string } | null> {
@@ -396,6 +467,36 @@ export class RaffleService {
 
     return this.dependencies.rateLimiter.consume(
       `raffle:email:${hashToken(`${eventSlug}:${email}`)}`,
+      limits.email,
+      RATE_LIMIT_WINDOW_SECONDS,
+    );
+  }
+
+  /**
+   * A separate bucket pair from {@link consumeRequestAllowance}, on the same
+   * IP and address axes but never sharing a key with it: a burst of lookups
+   * must not spend the allowance a real entrant needs to submit or resend,
+   * and the reverse.
+   */
+  private async consumeLookupAllowance(
+    eventSlug: string,
+    email: string,
+    ipAddress: string | undefined,
+  ): Promise<boolean> {
+    const limits = this.dependencies.lookupLimits ?? {
+      email: lookupEmailRequestLimit(),
+      ip: lookupIpRequestLimit(),
+    };
+
+    const ipAllowed = await this.dependencies.rateLimiter.consume(
+      `raffle:lookup-ip:${hashToken(`${eventSlug}:${ipAddress ?? 'unknown'}`)}`,
+      limits.ip,
+      RATE_LIMIT_WINDOW_SECONDS,
+    );
+    if (!ipAllowed) return false;
+
+    return this.dependencies.rateLimiter.consume(
+      `raffle:lookup-email:${hashToken(`${eventSlug}:${email}`)}`,
       limits.email,
       RATE_LIMIT_WINDOW_SECONDS,
     );

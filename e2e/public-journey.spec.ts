@@ -44,6 +44,17 @@ async function createOpenCampaign() {
   return data as { id: string; slug: string };
 }
 
+/**
+ * The number page shows the number as plain markup only until the ticket
+ * finishes drawing to canvas — a real browser then swaps it for an `<img>`
+ * whose accessible name carries the same text, and `getByText` does not see
+ * text inside an image's alt attribute. Matching either is what makes this
+ * assertion correct regardless of which side of that swap the page is on.
+ */
+function numberVisible(page: import('playwright/test').Page, formatted: string) {
+  return page.getByText(formatted).or(page.getByRole('img', { name: new RegExp(formatted) }));
+}
+
 /** Rebuilds the emailed link the way the mailer does, from the stored token id. */
 async function verificationLinkFor(campaignId: string) {
   const { data: entry } = await supabase
@@ -132,7 +143,7 @@ test('a visitor enters, confirms, and receives one number', async ({ page }) => 
   // there is no dialog in front of it.
   await page.getByRole('button', { name: 'Get my number' }).click();
 
-  await expect(page.getByText('No. 10000')).toBeVisible();
+  await expect(numberVisible(page, 'No. 10000')).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`/${campaign.slug}/number/`));
   const receiptUrl = page.url();
 
@@ -140,7 +151,7 @@ test('a visitor enters, confirms, and receives one number', async ({ page }) => 
   // not read as a dead end either. This is the visitor whose number exists and
   // whose hand-off went wrong, so the link takes them to it.
   await page.goto(`/${campaign.slug}/verify/${token}`);
-  await expect(page.getByText('No. 10000')).toBeVisible();
+  await expect(numberVisible(page, 'No. 10000')).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`/${campaign.slug}/number/`));
 
   const { data: campaignAfter } = await supabase
@@ -152,7 +163,7 @@ test('a visitor enters, confirms, and receives one number', async ({ page }) => 
 
   // The receipt link has no expiry and keeps working.
   await page.goto(receiptUrl);
-  await expect(page.getByText('No. 10000')).toBeVisible();
+  await expect(numberVisible(page, 'No. 10000')).toBeVisible();
   await expect(page.getByText(/announced at the venue/i)).toBeVisible();
 });
 
@@ -222,4 +233,57 @@ test('an unknown event is not found', async ({ page }) => {
   const response = await page.goto('/no-such-event');
 
   expect(response?.status()).toBe(404);
+});
+
+test('find my number: reachable from the entry page, discloses a real issued number, and never a pending one', async ({
+  page,
+}) => {
+  const campaign = await createOpenCampaign();
+  const email = `lookup-${unique()}@example.com`;
+
+  // Discoverable from the entry page, not only by guessing the URL.
+  await page.goto(`/${campaign.slug}`);
+  await page.getByRole('link', { name: 'Already entered? Find your number' }).click();
+  await expect(page).toHaveURL(`/${campaign.slug}/lookup`);
+  await expect(page.getByRole('heading', { name: 'Find your number' })).toBeVisible();
+
+  // Not yet entered: answers exactly like a mistyped address, not like "no
+  // such person" — see `RaffleService.lookupNumber`.
+  await page.getByLabel('Email address').fill(email);
+  const findButton = page.getByRole('button', { name: 'Find my number' });
+  await expect(findButton).toBeEnabled({ timeout: 15_000 });
+  await findButton.click();
+  await expect(page.getByText(/No ready number for that address yet/)).toBeVisible();
+
+  // Enter, but do not confirm yet: still must not disclose anything.
+  await page.goto(`/${campaign.slug}`);
+  await page.getByLabel(/Email address/).fill(email);
+  await page.getByRole('checkbox').first().check();
+  const submit = page.getByRole('button', { name: 'Send confirmation email' });
+  await expect(submit).toBeEnabled({ timeout: 15_000 });
+  await submit.click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Send email' }).click();
+  await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible();
+
+  await page.goto(`/${campaign.slug}/lookup`);
+  await page.getByLabel('Email address').fill(email);
+  await expect(page.getByRole('button', { name: 'Find my number' })).toBeEnabled({ timeout: 15_000 });
+  await page.getByRole('button', { name: 'Find my number' }).click();
+  await expect(page.getByText(/No ready number for that address yet/)).toBeVisible();
+
+  // Confirm through the real link, then the lookup discloses the real number —
+  // even with intake closed, which is when a visitor is most likely to need
+  // this.
+  const token = await verificationLinkFor(campaign.id);
+  await page.goto(`/${campaign.slug}/verify/${token}`);
+  await page.getByRole('button', { name: 'Get my number' }).click();
+  await expect(numberVisible(page, 'No. 10000')).toBeVisible();
+
+  await supabase.from('campaigns').update({ status: 'CLOSED' }).eq('id', campaign.id);
+
+  await page.goto(`/${campaign.slug}/lookup`);
+  await page.getByLabel('Email address').fill(email);
+  await expect(page.getByRole('button', { name: 'Find my number' })).toBeEnabled({ timeout: 15_000 });
+  await page.getByRole('button', { name: 'Find my number' }).click();
+  await expect(numberVisible(page, 'No. 10000')).toBeVisible();
 });

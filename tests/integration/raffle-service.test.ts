@@ -470,6 +470,175 @@ describe('RaffleService resend', () => {
   });
 });
 
+describe('RaffleService lookup', () => {
+  it('discloses the number of a verified entry', async () => {
+    const { service, repository } = buildService();
+    await service.requestVerification(validRequest);
+    repository.entries[0].state = 'VERIFIED';
+    repository.entries[0].number = 10_042;
+
+    await expect(
+      service.lookupNumber({
+        eventSlug: validRequest.eventSlug,
+        email: validRequest.email,
+        turnstileToken: 'turnstile-token',
+      }),
+    ).resolves.toEqual({ found: true, number: BigInt(10_042) });
+  });
+
+  it('answers an unknown address and a not-yet-verified one identically', async () => {
+    const unknown = buildService();
+    await expect(
+      unknown.service.lookupNumber({
+        eventSlug: 'jfca-2026',
+        email: 'nobody@example.com',
+        turnstileToken: 'turnstile-token',
+      }),
+    ).resolves.toEqual({ found: false });
+
+    const pending = buildService();
+    await pending.service.requestVerification(validRequest);
+    // Still PENDING: no number issued yet.
+    await expect(
+      pending.service.lookupNumber({
+        eventSlug: validRequest.eventSlug,
+        email: validRequest.email,
+        turnstileToken: 'turnstile-token',
+      }),
+    ).resolves.toEqual({ found: false });
+  });
+
+  it('answers an unknown event the same way as an unknown address', async () => {
+    const { service } = buildService();
+    await expect(
+      service.lookupNumber({
+        eventSlug: 'no-such-event',
+        email: validRequest.email,
+        turnstileToken: 'turnstile-token',
+      }),
+    ).resolves.toEqual({ found: false });
+  });
+
+  it('refuses input missing a captcha token before touching the repository', async () => {
+    const { service } = buildService();
+    await expect(
+      service.lookupNumber({ eventSlug: validRequest.eventSlug, email: validRequest.email }),
+    ).resolves.toEqual({ found: false, reason: 'invalid' });
+  });
+
+  it('refuses a failed captcha challenge', async () => {
+    const { service } = buildService({ turnstile: { verify: async () => false } });
+    await expect(
+      service.lookupNumber({
+        eventSlug: validRequest.eventSlug,
+        email: validRequest.email,
+        turnstileToken: 'turnstile-token',
+      }),
+    ).resolves.toEqual({ found: false, reason: 'turnstile' });
+  });
+
+  it('refuses a rate-limited lookup without disclosing anything about the address', async () => {
+    const { service } = buildService({ rateLimiter: { consume: async () => false } });
+    await expect(
+      service.lookupNumber({
+        eventSlug: validRequest.eventSlug,
+        email: validRequest.email,
+        turnstileToken: 'turnstile-token',
+      }),
+    ).resolves.toEqual({ found: false, reason: 'rate_limited' });
+  });
+
+  it('spends a rate-limit bucket that is separate from entry submissions and resends', async () => {
+    const keys: string[] = [];
+    const { service, repository } = buildService({
+      rateLimiter: {
+        consume: async (key?: string) => {
+          keys.push(key ?? '');
+          return true;
+        },
+      },
+    });
+    await service.requestVerification(validRequest);
+    repository.entries[0].state = 'VERIFIED';
+    repository.entries[0].number = 10_000;
+
+    await service.lookupNumber({
+      eventSlug: validRequest.eventSlug,
+      email: validRequest.email,
+      turnstileToken: 'turnstile-token',
+    });
+
+    // The submission above already put `raffle:ip:...` / `raffle:email:...`
+    // keys in this array; the lookup must add its own prefix rather than
+    // reuse either one — otherwise a burst of lookups could exhaust the
+    // allowance a real entrant needs to submit or resend, and the reverse.
+    const lookupKeys = keys.filter((key) => key.startsWith('raffle:lookup-'));
+    expect(lookupKeys).toHaveLength(2);
+    expect(lookupKeys.some((key) => key.startsWith('raffle:lookup-ip:'))).toBe(true);
+    expect(lookupKeys.some((key) => key.startsWith('raffle:lookup-email:'))).toBe(true);
+    expect(keys.some((key) => key.startsWith('raffle:ip:') || key.startsWith('raffle:email:'))).toBe(
+      true,
+    );
+  });
+
+  it('works whether the campaign is open, paused, or closed', async () => {
+    // Unlike requestVerification/resendVerification, a lookup must not be
+    // gated on the schedule at all: the moment a visitor is most likely to
+    // need this is around the draw itself, after intake has closed.
+    for (const status of ['DRAFT', 'SCHEDULED', 'PAUSED', 'CLOSED'] as const) {
+      const { service, repository } = buildService();
+      await service.requestVerification(validRequest);
+      repository.entries[0].state = 'VERIFIED';
+      repository.entries[0].number = 10_000;
+      repository.campaign.status = status;
+
+      await expect(
+        service.lookupNumber({
+          eventSlug: validRequest.eventSlug,
+          email: validRequest.email,
+          turnstileToken: 'turnstile-token',
+        }),
+      ).resolves.toEqual({ found: true, number: BigInt(10_000) });
+    }
+  });
+
+  it('honors isTest only once a real operator session is verified, bypassing the captcha and the rate limit', async () => {
+    const consumed: unknown[] = [];
+    const { service } = buildService({
+      verifyOperatorSession: async () => true,
+      turnstile: { verify: async () => false }, // Would refuse a real request.
+      rateLimiter: {
+        consume: async () => {
+          consumed.push(true);
+          return false; // Would refuse a real request; must not even be asked for a test one.
+        },
+      },
+    });
+
+    await expect(
+      service.lookupNumber({
+        eventSlug: validRequest.eventSlug,
+        email: 'nobody@example.com',
+        isTest: true,
+      }),
+    ).resolves.toEqual({ found: false });
+    expect(consumed).toHaveLength(0);
+  });
+
+  it('never trusts a self-reported isTest claim without a verified operator session', async () => {
+    const { service } = buildService({ turnstile: { verify: async () => false } });
+    // No `verifyOperatorSession` wired up, so the claim resolves to false and
+    // this must fail the captcha check exactly like an ordinary request would.
+    await expect(
+      service.lookupNumber({
+        eventSlug: validRequest.eventSlug,
+        email: validRequest.email,
+        isTest: true,
+      }),
+    ).resolves.toEqual({ found: false, reason: 'invalid' });
+  });
+});
+
 describe('RaffleService test mode', () => {
   it('ignores an isTest claim when the operator session cannot be verified', async () => {
     const { service, repository } = buildService({ verifyOperatorSession: async () => false });

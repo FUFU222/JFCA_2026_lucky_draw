@@ -878,6 +878,89 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
       service.confirmVerification({ eventSlug: 'jfca-2026', token: 'z'.repeat(43) }),
     ).resolves.toBeNull();
   });
+
+  it('finds a real, verified number through "find my number", against real Postgres', async () => {
+    const campaign = await createOpenCampaign();
+    const mailer = new FakeMailer();
+    const service = buildService(mailer);
+    const email = `lookup-${uniqueSuffix()}@example.com`;
+
+    await service.requestVerification({
+      eventSlug: campaign.slug,
+      email,
+      termsConsent: true,
+      turnstileToken: 'captcha',
+    });
+
+    // Not found while only PENDING — proves the adapter reads real state from
+    // Postgres, not a stub.
+    await expect(
+      service.lookupNumber({ eventSlug: campaign.slug, email, turnstileToken: 'captcha' }),
+    ).resolves.toEqual({ found: false });
+
+    const confirmed = await service.confirmVerification({
+      eventSlug: campaign.slug,
+      token: mailer.verification[0].token,
+    });
+
+    // Closing the campaign afterwards proves the lookup is genuinely
+    // schedule-independent end to end, through the real repository — not
+    // only in the in-memory service tests.
+    await supabase.from('campaigns').update({ status: 'CLOSED' }).eq('id', campaign.id);
+
+    await expect(
+      service.lookupNumber({ eventSlug: campaign.slug, email, turnstileToken: 'captcha' }),
+    ).resolves.toEqual({ found: true, number: confirmed?.number });
+  });
+
+  it('enforces the per-address lookup limit against real Postgres, in a bucket the entry form never touches', async () => {
+    const campaign = await createOpenCampaign();
+    const mailer = new FakeMailer();
+    const service = buildService(mailer);
+    const email = `lookup-limit-${uniqueSuffix()}@example.com`;
+
+    await service.requestVerification({
+      eventSlug: campaign.slug,
+      email,
+      termsConsent: true,
+      turnstileToken: 'captcha',
+    });
+    await service.confirmVerification({ eventSlug: campaign.slug, token: mailer.verification[0].token });
+
+    // Five distinct-IP lookups succeed — proves the address bucket, not the
+    // (generous, 1000/day) IP bucket, is what caps this at the default of 5.
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await expect(
+        service.lookupNumber({
+          eventSlug: campaign.slug,
+          email,
+          turnstileToken: 'captcha',
+          ipAddress: `203.0.113.${attempt}`,
+        }),
+      ).resolves.toMatchObject({ found: true });
+    }
+
+    await expect(
+      service.lookupNumber({
+        eventSlug: campaign.slug,
+        email,
+        turnstileToken: 'captcha',
+        ipAddress: '203.0.113.99',
+      }),
+    ).resolves.toEqual({ found: false, reason: 'rate_limited' });
+
+    // The entry form's own allowance is untouched: a sixth real submission
+    // from this address is refused for an unrelated reason (already
+    // verified), not for having run out of a shared budget.
+    await expect(
+      service.requestVerification({
+        eventSlug: campaign.slug,
+        email,
+        termsConsent: true,
+        turnstileToken: 'captcha',
+      }),
+    ).resolves.toEqual({ accepted: true });
+  });
 });
 
 async function entryId(campaignId: string): Promise<string | null> {

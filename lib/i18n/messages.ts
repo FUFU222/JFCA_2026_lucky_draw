@@ -122,6 +122,26 @@ export const messages = {
     support: 'Questions:',
   },
 
+  // A separate small screen, deliberately not folded into the entry form: the
+  // same box and button would have to mean both "enter the draw" and "look up
+  // an existing number", and a mistyped address would silently become a
+  // second entry instead of a lookup. This form asks for nothing but an
+  // address, so there is no consent box to make sense of and no profile
+  // fields to explain.
+  lookup: {
+    entryLink: 'Already entered? Find your number',
+    heading: 'Find your number',
+    body: 'Enter the address you entered with, and your number shows up here if it is ready.',
+    email: 'Email address',
+    submit: 'Find my number',
+    submitting: 'Checking…',
+    // Identical wording for "never entered" and "entered but not confirmed
+    // yet", on purpose — see `RaffleService.lookupNumber`.
+    notFound: 'No ready number for that address yet. Check your confirmation email, or ask a staff member for help.',
+    errorRateLimited: 'Too many attempts from this network. Ask a member of staff for help, or try again from mobile data.',
+    errorGeneric: 'Something went wrong. Please try again.',
+  },
+
   schedule: {
     beforeHeading: 'Entries are not open yet',
     beforeBody: 'Come back when entries open at this event.',

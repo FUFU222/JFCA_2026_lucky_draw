@@ -27,7 +27,12 @@ export function assertRaffleConfiguration(
   // within the first hour at venue scale, so an operator who raised it and
   // fat-fingered the value would find the shared wifi locked out mid-event
   // with nothing anywhere saying why. Set wrong is worse than not set.
-  for (const name of ['RAFFLE_IP_REQUEST_LIMIT', 'RAFFLE_EMAIL_REQUEST_LIMIT']) {
+  for (const name of [
+    'RAFFLE_IP_REQUEST_LIMIT',
+    'RAFFLE_EMAIL_REQUEST_LIMIT',
+    'RAFFLE_LOOKUP_IP_REQUEST_LIMIT',
+    'RAFFLE_LOOKUP_EMAIL_REQUEST_LIMIT',
+  ]) {
     const raw = env[name]?.trim();
     if (!raw) continue;
     const parsed = Number(raw);
