@@ -55,6 +55,33 @@ export function SaveableTicket({ number, eventTitle }: { number: bigint; eventTi
         // downloading the former, and this is the platform the button exists
         // for.
         url = URL.createObjectURL(blob);
+
+        // Decoded ahead of the swap where possible, not left for the browser
+        // to do on first paint. The `ticket-pop` animation's clock starts the
+        // moment the `<img>` is inserted, not when it is first composited —
+        // an image that still needs decoding at insertion can take long
+        // enough that the animation's 500ms is over before the browser ever
+        // paints a frame of it, so the pop does not play at all: the ticket
+        // snaps straight to its settled state. Measured on a real phone, this
+        // was not the rare case.
+        //
+        // Raced against a short timeout rather than awaited outright:
+        // `decode()` is not guaranteed to settle at all in every environment
+        // (observed hanging indefinitely, neither resolving nor rejecting, in
+        // one browser automation harness during testing). This is the one
+        // screen the whole visit exists to reach, so a smoother pop is worth
+        // having but never worth risking the number itself on — 200ms is
+        // long enough for a same-origin blob decode to finish in practice,
+        // short enough that a visitor who hits the fallback never notices
+        // they did.
+        const preload = new Image();
+        preload.src = url;
+        await Promise.race([
+          preload.decode().catch(() => {}),
+          new Promise((resolve) => setTimeout(resolve, 200)),
+        ]);
+        if (cancelled) return;
+
         setSaved(url);
       } catch {
         // The markup below is the number. Losing the picture costs the button
