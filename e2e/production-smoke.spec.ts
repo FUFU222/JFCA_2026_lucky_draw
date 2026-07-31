@@ -56,6 +56,19 @@ test('the operator area is closed to the public', async ({ page }) => {
   await expect(page).toHaveURL(/\/admin\/login/);
 });
 
+test('the health endpoint answers, and does not leak numbers to the public', async ({ request }) => {
+  const response = await request.get(`${baseUrl}/api/health`);
+  const body = await response.json();
+
+  // 503 means a visitor could not enter right now, which is the one thing an
+  // external monitor keys on.
+  expect(response.status()).toBe(200);
+  expect(['ok', 'degraded']).toContain(body.status);
+  // The detail block is behind the cron credential; an anonymous caller learns
+  // that the system is up, and no counts.
+  expect(body.detail).toBeUndefined();
+});
+
 test('the retry worker refuses a request without the cron credential', async ({ request }) => {
   const response = await request.post(`${baseUrl}/api/internal/email-outbox`);
 

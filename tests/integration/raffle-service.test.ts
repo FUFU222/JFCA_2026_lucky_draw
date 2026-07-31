@@ -623,7 +623,7 @@ describe('RaffleService test mode', () => {
     expect(repository.entries).toMatchObject([{ is_test: false, state: 'PENDING' }]);
   });
 
-  it('sends the receipt email again on a second rehearsal, not only the first', async () => {
+  it('re-runs the whole journey on a second rehearsal, with one email each time', async () => {
     const { service, repository, mailer } = buildService({ verifyOperatorSession: async () => true });
 
     await service.requestVerification({ ...validRequest, isTest: true });
@@ -631,7 +631,7 @@ describe('RaffleService test mode', () => {
       eventSlug: validRequest.eventSlug,
       token: mailer.verification[0].token,
     });
-    expect(mailer.receipts).toHaveLength(1);
+    expect(mailer.verification).toHaveLength(1);
 
     // The same operator rehearses again from the same address.
     await service.requestVerification({ ...validRequest, isTest: true });
@@ -640,9 +640,12 @@ describe('RaffleService test mode', () => {
       token: mailer.verification[1].token,
     });
 
-    // The number shows on screen either way; only the mail proves the reset
-    // released the receipt job the first run had already marked as sent.
-    expect(mailer.receipts).toHaveLength(2);
+    // This test was written because a rehearsal after the first once issued a
+    // number on screen while silently sending nothing. The email it watches has
+    // changed — there is only one now — but the thing worth watching has not:
+    // the second run has to be a whole run, not a number with no message.
+    expect(mailer.verification).toHaveLength(2);
+    expect(mailer.receipts).toHaveLength(0);
     expect(repository.entries).toHaveLength(1);
   });
 });
@@ -662,7 +665,7 @@ describe('RaffleService confirmation', () => {
     expect(first?.receiptToken).toBe(repeated?.receiptToken);
   });
 
-  it('sends exactly one receipt even when confirmation is repeated', async () => {
+  it('sends no second email, however many times confirmation is repeated', async () => {
     const { service, mailer, repository } = buildService();
     await service.requestVerification(validRequest);
     const token = mailer.verification[0].token;
@@ -670,14 +673,18 @@ describe('RaffleService confirmation', () => {
     await service.confirmVerification({ eventSlug: 'jfca-2026', token });
     await service.confirmVerification({ eventSlug: 'jfca-2026', token });
 
-    expect(mailer.receipts).toHaveLength(1);
-    expect(mailer.receipts[0].number).toBe(BigInt(10_000));
-    expect(repository.completedJobs).toMatchObject([{ jobId: 'receipt-job-1', sent: true }]);
+    // The visitor's durable copy is the link they are holding: it returns to
+    // this number for good once one has been issued. A receipt would be a
+    // second copy of that, at twice the mail volume on the day.
+    expect(mailer.receipts).toHaveLength(0);
+    expect(repository.completedJobs).toHaveLength(0);
   });
 
-  it('keeps the number valid and the job retryable when the receipt cannot be sent', async () => {
+  it('cannot have its confirmation affected by mail at all', async () => {
     const { service, mailer, repository } = buildService();
     await service.requestVerification(validRequest);
+    // A mailer that would throw on a receipt. Nothing should ever ask it to
+    // send one, so this must be invisible to the confirmation.
     mailer.receiptFailure = new Error('resend unavailable');
 
     const result = await service.confirmVerification({
@@ -687,16 +694,8 @@ describe('RaffleService confirmation', () => {
 
     expect(result?.number).toBe(BigInt(10_000));
     expect(repository.entries[0]).toMatchObject({ state: 'VERIFIED', number: 10_000 });
-    expect(repository.deliveries).toContainEqual({
-      entryId: 'entry-1',
-      kind: 'RECEIPT',
-      status: 'FAILED',
-      providerMessageId: null,
-      providerError: 'resend unavailable',
-    });
-    expect(repository.completedJobs).toMatchObject([
-      { jobId: 'receipt-job-1', sent: false, error: 'resend unavailable' },
-    ]);
+    expect(repository.deliveries.filter((delivery) => delivery.kind === 'RECEIPT')).toHaveLength(0);
+    expect(repository.completedJobs).toHaveLength(0);
   });
 
   it('reports an unusable link as null and a server fault as an error', async () => {

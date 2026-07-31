@@ -61,9 +61,12 @@ thing that must not run against the real database.
 The plan and the raised rate limit are for this event only — see the teardown
 step in [on-site-runbook.md](on-site-runbook.md). Cancel by **2026-08-31**.
 
-- [x] **Choose a plan that covers roughly 60,000 messages**: about 30,000
-      entrants, each receiving a verification email and a number receipt. The
-      free allowance is nowhere near this. Pro was taken on 2026-07-29.
+- [x] **Choose a plan that covers roughly 30,000 messages**: about 30,000
+      entrants, each receiving one verification email. It was 60,000 until
+      `0010` removed the receipt email; the figures below were written against
+      that number and are now roughly twice what the event needs, which is the
+      right direction to be wrong in. The free allowance is still nowhere near
+      it. Pro was taken on 2026-07-29.
 
       **The tier does not have to be decided in advance, and should not be.**
       Pro includes 50,000 messages at $20 and 100,000 at $35, and going over
@@ -371,9 +374,17 @@ advances the sequence, so the first real visitor would not be 10000.
       CSV export — only in 最近の応募 and 応募一覧, badged テスト.
 - [ ] The **same test address submitted a second time**, and the whole journey
       re-run on it: the entry returns to 確認待ち, a fresh verification email
-      arrives, the next number is 900000002, **and a second receipt email
-      arrives**. This is the case that regressed once; the number appearing on
-      screen does not prove the mail went out.
+      arrives, and the next number is 900000002. This is the case that regressed
+      once — a rehearsal that put a number on screen while silently sending
+      nothing — so what matters is that the second run is a whole run.
+- [ ] **The number saved from the number page.** Press 保存 and confirm the
+      picture lands on the phone, then long-press the ticket and confirm the
+      option to save it to Photos appears. Do this on an iPhone and an Android
+      handset: the button saves to Files on iOS, and the long press is the only
+      route to the camera roll.
+- [ ] **A confirmation link opened again after the number was issued**, and it
+      lands back on the number. This is the only durable copy the visitor is
+      sent, so it is the one that has to work.
 - [ ] A test-mode submission attempted on an address a real entry already holds.
       It must be refused with a message saying so, and that entrant's row must
       keep `is_test = false`.

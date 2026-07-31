@@ -18,6 +18,7 @@
 .gstack/
 .DS_Store
 .worktrees/
+.claude/settings.local.json
 
 # TypeScript
 *.tsbuildinfo

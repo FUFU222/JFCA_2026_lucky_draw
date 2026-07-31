@@ -135,10 +135,13 @@ Added because rehearsing the journey previously meant creating real entries.
 - Skips the schedule, the rate limits and the captcha, so a rehearsal works
   before opening, after closing and while paused.
 - **Resubmitting the same address resets the previous rehearsal** and re-runs
-  the whole journey, including a new verification email and a new receipt email.
-  `resetTestEntry` clears the entry's `email_outbox` rows as part of this —
-  without that the receipt job stays at `SENT` and every rehearsal after the
-  first issues a number on screen while silently sending no receipt.
+  the whole journey, including a new verification email. `resetTestEntry` clears
+  the entry's `email_outbox` rows as part of this. That was load-bearing when a
+  receipt was sent — without it the receipt job stayed at `SENT` and every
+  rehearsal after the first issued a number on screen while silently sending
+  nothing. Since `0010` there is no receipt to lose, but the clear stays: it is
+  what keeps a rehearsal a clean run rather than one carrying the last one's
+  bookkeeping.
 - **A rehearsal on an address a real entry holds is refused**
   (`test_address_conflict`, HTTP 409), because overwriting that row would move a
   genuine entrant into the test number range and drop them from the draw. The
