@@ -68,18 +68,22 @@ in it, and neither do they appear in 確認済み応募数 or 確認待ち.
 
 ## Someone lost their number
 
-The receipt link never expires, so it is still in their inbox. **The most
-recent confirmation email works too** — opening that link again takes them to
-their number rather than saying it has been used. Only the most recent one:
+**The confirmation email is the copy.** Opening that link again takes them to
+their number rather than saying it has been used, and it keeps working long
+after the 24 hours in which it could still claim one. Only the most recent one:
 if they used **Send it again**, the earlier links belong to spent cycles and
-still read as unusable. If they cannot find either email:
+still read as unusable.
+
+There is no second email. The number page asks them to save the picture or take
+a screenshot, and that plus the link is what a visitor leaves with. If they
+cannot find the email:
 
 1. Search their address under **応募一覧** and read the number to them.
 2. If they contact you later, they are directed to `info@chairman.jp`. An
    operator looks the entry up and replies within two to three days.
 
-There is deliberately no way to resend a receipt email and no way to reissue a
-number.
+There is deliberately no way to send them their number by email and no way to
+reissue a number.
 
 ## Starting, pausing, and closing entries
 

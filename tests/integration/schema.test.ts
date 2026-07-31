@@ -278,7 +278,7 @@ describeWithSupabase('lucky draw schema', () => {
     expect(staleBucket).toBeNull();
   });
 
-  it('issues one number and one receipt job when verification is repeated', async () => {
+  it('issues one number and arms no mail, however often verification is repeated', async () => {
     const campaign = await createCampaign();
     const entry = await createEntry({ campaignId: campaign.id, email: 'verify@example.com' });
     const tokenHash = await createVerificationToken(
@@ -301,14 +301,18 @@ describeWithSupabase('lucky draw schema', () => {
     expect(firstNumber).toBe(10_000);
     expect(repeatedNumber).toBe(firstNumber);
 
+    // Migration `0010` removed three `RECEIPT` inserts from this function: one
+    // on the repeat-confirmation path, one where a verified entry re-derives
+    // its receipt, and one where the number is first issued. This exercises the
+    // first and the third. Both must leave the outbox empty, or the retry
+    // worker would deliver the email the change exists to stop.
     const { data: jobs, error } = await supabase
       .from('email_outbox')
       .select('id, kind')
-      .eq('entry_id', entry.id)
-      .eq('kind', 'RECEIPT');
+      .eq('entry_id', entry.id);
 
     expect(error).toBeNull();
-    expect(jobs).toHaveLength(1);
+    expect(jobs).toEqual([]);
   });
 
   it('issues a test entry a number from the separate test counter, leaving next_number untouched', async () => {

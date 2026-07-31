@@ -103,13 +103,23 @@ export const messages = {
     failed: 'That did not go through. Tap again — you will not get a second number.',
   },
 
+  // Four lines and a button. This is the screen the whole visit exists to
+  // reach, and every extra sentence on it is a sentence between a visitor and
+  // the one thing they came for — so the number carries the event name itself,
+  // and nothing here explains what the ticket above already shows.
   receipt: {
     label: 'Your Lucky Draw Number',
     heading: 'Your entry is confirmed',
-    screenshot: 'Save this number. A screenshot is the easiest way.',
-    venue: 'Results are announced at the venue. Compare them with the number above.',
-    emailed: 'We also emailed this number to you.',
-    support: 'Lost your number? Contact',
+    // The button only exists where the picture could be drawn, so this line has
+    // to stand on its own when there is no button beside it.
+    save: 'Save your number',
+    saveHint: 'Keep it — a screenshot works too.',
+    venue: 'Results are announced at the venue. Have your number ready.',
+    // Replaces "We also emailed this number to you", which stopped being true
+    // when the receipt email went. The confirmation email is the durable copy
+    // now: its link returns here for good once a number has been issued.
+    lost: 'Lost it? Open the link in your confirmation email again.',
+    support: 'Questions:',
   },
 
   schedule: {

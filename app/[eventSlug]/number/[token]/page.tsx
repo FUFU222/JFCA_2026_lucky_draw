@@ -24,7 +24,7 @@ export default async function NumberPage({
 
   return (
     <PageShell>
-      <NumberReceipt number={receipt.number} />
+      <NumberReceipt number={receipt.number} eventTitle={campaign.title} />
     </PageShell>
   );
 }

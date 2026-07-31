@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 
 import { SUPPORT_EMAIL } from '../../lib/campaign/legal';
 import { messages } from '../../lib/i18n/messages';
-import { formatRaffleNumber } from '../../lib/raffle/number';
+import { SaveableTicket } from './saveable-ticket';
 
 /**
  * Six pieces, not a screenful — enough to say "this was issued" without
@@ -23,12 +23,16 @@ const CONFETTI: Array<{ left: string; color: string; tx: string; ty: string; rot
  * The number is the only thing on this page that matters, so it is the only
  * thing sized to be read across a crowded hall. No profile editing, and no
  * statement about whether the entry has won.
+ *
+ * Keeping it is the second job, and the visitor gets three ways to do it — the
+ * button, a long press on the ticket, a screenshot — described in one line
+ * rather than three, because this screen earns its calm.
  */
-export function NumberReceipt({ number }: { number: bigint }) {
+export function NumberReceipt({ number, eventTitle }: { number: bigint; eventTitle: string }) {
   const t = messages.receipt;
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-5">
       <h1 className="text-2xl font-bold text-neutral-900">{t.heading}</h1>
 
       <div className="relative">
@@ -51,19 +55,14 @@ export function NumberReceipt({ number }: { number: bigint }) {
           />
         ))}
 
-        <div className="ticket-pop rounded-2xl border-2 border-[var(--brand-accent)] bg-[var(--brand-tint)] px-6 py-10 text-center">
-          <p className="text-sm font-medium uppercase tracking-wide text-neutral-500">{t.label}</p>
-          <p className="mt-3 text-5xl font-bold tabular-nums tracking-tight text-neutral-900 sm:text-6xl">
-            {formatRaffleNumber(number)}
-          </p>
-        </div>
+        <SaveableTicket number={number} eventTitle={eventTitle} />
       </div>
 
-      <p className="text-[15px] leading-relaxed text-neutral-800">{t.screenshot}</p>
+      <p className="text-[15px] leading-relaxed text-neutral-800">{t.saveHint}</p>
       <p className="text-[15px] leading-relaxed text-neutral-800">{t.venue}</p>
 
       <div className="space-y-2 border-t border-neutral-200 pt-6 text-sm text-neutral-600">
-        <p>{t.emailed}</p>
+        <p>{t.lost}</p>
         <p>
           {t.support}{' '}
           <a

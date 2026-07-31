@@ -1,0 +1,94 @@
+name: Production smoke
+
+# The deep, functional half of monitoring: it drives a real browser against the
+# deployed origin and checks the pages a visitor and an operator actually meet.
+# `e2e/production-smoke.spec.ts` creates nothing, so it is safe to run against
+# production at any time, including during the event.
+#
+# **This is a backstop, not the alarm.** GitHub deprioritises scheduled
+# workflows heavily — measured on this repository, a `*/5` schedule really ran
+# about every 88 minutes — so the cadence below is a request, not a promise. The
+# thing that notices an outage in a minute is the external HTTP monitor on
+# `/api/health`; see docs/operations/monitoring.md. What this workflow adds is
+# depth: a page that renders, an admin route that refuses an anonymous caller.
+#
+# Run it by hand from the Actions tab after every deploy, and before doors open.
+on:
+  schedule:
+    # Hourly, deliberately off the top of the hour: GitHub warns that runs
+    # scheduled at :00 are the most likely to be delayed or dropped.
+    - cron: '17 * * * *'
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: 'Origin to check. Defaults to the APP_URL repository secret.'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Resolve the origin
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          INPUT_URL: ${{ inputs.base_url }}
+        run: |
+          origin="${INPUT_URL:-$APP_URL}"
+          if [ -z "$origin" ]; then
+            echo "Set the APP_URL repository secret, or pass base_url when dispatching." >&2
+            exit 1
+          fi
+          echo "SMOKE_BASE_URL=$origin" >> "$GITHUB_ENV"
+
+      # Checked before the browser download, so the common failure — a bad
+      # origin, an expired certificate, a deployment that will not boot — is
+      # reported in seconds rather than after a two-minute install.
+      - name: Health endpoint
+        run: |
+          status=$(curl -sS -m 20 -o /tmp/health.json -w '%{http_code}' "$SMOKE_BASE_URL/api/health")
+          echo "HTTP $status"
+          cat /tmp/health.json
+          echo
+          if [ "$status" -ge 400 ]; then
+            echo "Health check reported the deployment as down" >&2
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        run: pnpm exec playwright install chromium --with-deps
+
+      # Invoked through `playwright` directly rather than the `test:e2e` script,
+      # so the reporter flags reach Playwright instead of pnpm.
+      - name: Read-only smoke suite
+        run: pnpm exec playwright test production-smoke --reporter=list,html
+
+      - name: Upload the report when it fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+          if-no-files-found: ignore
