@@ -30,7 +30,9 @@ export interface TicketDrawing {
 }
 
 export function ticketFileName(number: bigint): string {
-  return `lucky-draw-${formatRaffleNumber(number)}.png`;
+  // The raw digits, not `formatRaffleNumber()`: its "No. 10000" display form
+  // has a space and a period, which land in the saved file's name verbatim.
+  return `lucky-draw-${number}.png`;
 }
 
 /**
