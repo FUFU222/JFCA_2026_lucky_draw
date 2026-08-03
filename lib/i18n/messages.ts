@@ -83,6 +83,8 @@ export const messages = {
     resendDialogConfirm: 'Send again',
     resendDialogCancel: 'Go back',
     resendDone: 'If this address can enter, another link is on its way.',
+    // Followed by a live M:SS countdown; see formatCooldown in raffle-form.tsx.
+    resendWait: 'You can request another in',
   },
 
   // This page has no confirmation dialog, so the one line under the heading is

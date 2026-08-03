@@ -111,6 +111,27 @@ describe('CSV export', () => {
     expect(body.trim().split('\r\n')).toHaveLength(1);
   });
 
+  it('does not mark the file when more rows stream than were counted', async () => {
+    // `rowCount` is a snapshot taken before the stream starts; registration
+    // can still be open mid-event, so a later page can legitimately include
+    // an entry that did not exist yet when the count was taken. That is
+    // growth, not the truncation the marker row and corrective audit entry
+    // exist to catch.
+    queries.countEntriesForExport.mockResolvedValue(1);
+    queries.exportEntryPages.mockImplementation(
+      pagesOf([
+        { number: 10_000, email: 'person@example.com' },
+        { number: 10_001, email: 'late-arrival@example.com' },
+      ]),
+    );
+
+    const response = await exportCsv(exportRequest());
+    const body = await response.text();
+
+    expect(body).not.toContain('EXPORT INCOMPLETE');
+    expect(audit.recordAudit).toHaveBeenCalledTimes(1);
+  });
+
   it('answers 404 for an event that does not exist, without auditing an export', async () => {
     queries.loadDashboard.mockResolvedValue(null);
 
