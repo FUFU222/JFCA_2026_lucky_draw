@@ -269,6 +269,9 @@ come from `pnpm exec supabase status -o json`. Local mail lands in Mailpit at
   at the venue. Names every control exactly as it appears on screen.
 - [staging.md](operations/staging.md) — the load test, and why staging is not a
   Vercel deployment.
+- [qa-verification-checklist.md](operations/qa-verification-checklist.md) —
+  what to run in test mode on production to close the gap a local-only QA
+  pass cannot reach (the admin dashboard).
 
 The original implementation plan,
 [superpowers/plans/2026-07-27-lucky-draw.md](superpowers/plans/2026-07-27-lucky-draw.md),

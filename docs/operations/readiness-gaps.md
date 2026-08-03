@@ -80,30 +80,48 @@ messages the allowance is now comfortable rather than exceeded.
       hard cap is five times the plan quota — against the event stopping at the
       booth, which is the wrong way round.
 
-### B2. The Supabase plan is not recorded (S1, by D-7)
+### B2. The Supabase plan is not recorded (S1, by D-7) — closed 2026-07-31
 
-No document says which plan project `eyysljemlsghdxjaxjbn` is on, and the
-difference decides whether the entrant data can be recovered at all. On the free
-tier there is no point-in-time recovery, backups are limited, and a project
-pauses after a week of inactivity — which is a real risk for a project that is
-set up in July and needed in August.
+Confirmed via the Supabase Management API: organization **`FUFU222's Org`**,
+plan **Free**. On Free there is no automatic backup of any kind (daily
+backups and PITR are both Pro-and-above features), backups cannot be
+downloaded even if one existed, and the project pauses after 7 days of low
+activity — a real risk for a project created 2026-07-28 with no scheduled
+traffic hitting it daily. Full detail in
+[backup-restore.md](backup-restore.md).
 
-- [ ] Write the plan and its backup capability into this file.
-- [ ] If it is not on a paid plan, move it before the dry run, not after.
+**Decision (2026-07-31, project owner): stay on Free.** The mitigation is a
+manual dump, run reliably rather than automatically, rather than paying for
+Pro's automatic one. See B3.
 
-### B3. Backups have never been restored (S1, by D-7)
+- [x] Write the plan and its backup capability into this file.
+- [x] Decide whether to move off Free — decided not to; manual dump instead.
 
-There is no backup or restore procedure anywhere in the repository. The entrant
-table is the draw itself and cannot be re-collected.
+### B3. Backups have never been restored (S1, by D-7) — closed 2026-07-31
 
-- [ ] Decide and write down the two numbers every recovery plan needs: how much
-      data may be lost (RPO) and how long recovery may take (RTO). For a
-      one-day event where the pool is the deliverable, the honest answers are
-      close to zero and under an hour.
-- [ ] **Restore once, into a scratch project, and confirm the row counts.** A
-      backup that has never been restored is a belief, not a backup.
+There was no backup or restore procedure anywhere in the repository. The
+entrant table is the draw itself and cannot be re-collected — and it already
+holds 5 real, verified rows from the maintainer's own dry-run entries, so this
+was not a theoretical gap even before the event.
+
+Full write-up, commands, and the restore proof in
+[backup-restore.md](backup-restore.md). Summary:
+
+- [x] **RPO/RTO recorded, pending final owner sign-off**: RPO effectively
+      zero for the pool (the CSV export at intake-close is the real
+      backstop), RTO under one hour (the restore below took minutes).
+- [x] **Restored once and confirmed row counts.** `supabase db dump --linked`
+      (no database password needed) into the local Supabase dev stack, used
+      as the scratch target because the organization is already at its
+      2-project Free-tier cap. All 7 tables matched production exactly. The
+      file with real addresses in it was deleted immediately after.
 - [ ] Export a CSV to a second location the moment intake closes, before
-      anything else. It is the cheapest possible independent copy of the pool.
+      anything else. Added as on-site-runbook.md step 6a; still needs
+      **someone to actually do it reliably on the day** — a personal
+      calendar/phone reminder is the recommendation, not a piece of
+      automation (a scheduled cloud agent was considered and rejected: an
+      unattended agent with production access is a worse risk than the one
+      it would solve).
 
 ### B4. The load test has never been run (S2, by D-5)
 
@@ -116,60 +134,121 @@ needs the built app running somewhere else against a separate Supabase project.
       being accepted instead. Either is defensible; leaving the target in a
       document while never measuring it is not.
 
-### B5. Monitoring is implemented but switched off (S2, by D-3)
+### B5. Monitoring is implemented but switched off (S2, by D-3) — closed 2026-07-31
 
 Landed on this branch: a structured error log, an alert webhook, `/api/health`,
-and an hourly `Production smoke` workflow. **Three of the four layers do nothing
-until they are configured**, and the configuration is Web-UI work.
+and an hourly `Production smoke` workflow. Three of the four layers did nothing
+until configured; all four are now live.
 
-- [ ] Follow [monitoring.md](monitoring.md) §2 and §3: create the webhook, set
-      `ALERT_WEBHOOK_URL` in Vercel, create the two always-on monitors.
-- [ ] Confirm `detail.errorAlerts` reads `"on"` against production. Set-but-not-
-      deployed reads `"off"`, which is how monitoring usually fails.
-- [ ] Put the event-day `"accepting":true` monitor on the operator's checklist,
-      including switching it off afterwards.
+- [x] Slack incoming webhook created (`#jfca-luckydraw-alerts`), `ALERT_WEBHOOK_URL`
+      set in Vercel Production and redeployed.
+- [x] Three UptimeRobot monitors created: down-alert and degraded-state
+      always on, `"accepting":true` created and correctly left **paused**
+      until intake opens.
+- [x] **`detail.errorAlerts` confirmed `"on"` against production** — but only
+      after an unplanned detour: the original `CRON_SECRET` turned out to be
+      unrecoverable. It was saved as a Vercel **Sensitive** environment
+      variable, which cannot be read back by anyone, through any interface,
+      once saved — not a permissions gap, a platform guarantee. Rotated
+      instead: new value set in Vercel and as the matching GitHub Actions
+      repository secret, production redeployed, confirmed `"on"`, and the
+      email outbox retry worker's `workflow_dispatch` run manually re-checked
+      to prove it still authenticates with the new value (`gh run view` ✓).
+      **Lesson for next time:** a Sensitive-typed secret needs its value kept
+      somewhere retrievable (password manager) the moment it is created, or
+      losing the local `.env.local` copy means losing it entirely.
+- [x] The event-day `"accepting":true` monitor's start/stop is on the
+      operator's checklist in [on-site-runbook.md](on-site-runbook.md).
 - [ ] The alerting items in [prelaunch-checklist.md](prelaunch-checklist.md) §9
-      (Vercel, Supabase and Resend notifications) are all still unchecked and are
-      not replaced by any of this.
+      (Vercel, Supabase and Resend's own native notifications) are separate
+      from all of the above and still unchecked.
 
 ### B6. There is no rollback procedure and no code freeze (S2, by D-3)
 
 Vercel can roll a deployment back instantly. Nothing says so, nobody has done it
 once, and there is no date after which changes stop.
 
-- [ ] Roll back a deployment once on purpose, and write the steps down.
-- [ ] Set a freeze date — **D-2 is the recommendation** — after which nothing
-      ships but a fix for something found in the dry run.
+- [x] **Freeze date confirmed (project owner, 2026-07-31): D-2, 2026-08-13.**
+      After that date nothing ships except a fix for something the dry run
+      found.
+- [ ] **Roll back a deployment once on purpose, and write the steps down —
+      attempted 2026-07-31, deferred.** A concurrent session merged and
+      deployed PR #14 (`revert/client-ip-probe`) to production in the middle
+      of the attempt, so rolling back would have silently undone that
+      teammate's just-shipped change. Retry once the branch is quiet. Two
+      things learned in the attempt, worth keeping:
+      - The project is on Vercel's **Hobby** plan, which only allows a
+        rollback to the *immediately preceding* production deployment —
+        `vercel rollback <two-or-more-back>` fails with `402 upgrade to
+        pro`. One-step rollback is what this event needs anyway (see B6a
+        below), but it means "roll back to before yesterday's three
+        deploys" is not available; a fix has to go forward as a new deploy
+        instead.
+      - `vercel rollback <url> --yes` is the command, run from the repo
+        root, and needs no dashboard step. `vercel rollback` with no
+        argument reports whether one is in progress.
 
-### B7. There is no plan for the venue when the system is unavailable (S1, by D-2)
+#### B6a. Why one-step rollback is enough here
+
+Vercel's `isRollbackCandidate` flag (visible via `list_deployments`) is only
+`true` for the current production deployment and the one immediately before
+it — never for anything older. Combined with the Hobby-plan limit above,
+**the rollback tool only ever reaches back one deploy**, which is exactly
+why the freeze date matters: after D-2, at most one deploy (an emergency fix)
+should happen before the event, so "roll back" always means "back to the
+last known-good state," never "which of the last five deploys was it."
+
+### B7. There is no plan for the venue when the system is unavailable (S1, by D-2) — closed 2026-07-31
 
 The rate limiter fails closed, so a Supabase outage shows every visitor "Too
 many attempts" rather than an outage message. The runbook covers what to check;
-it does not cover what the booth *does* for the twenty minutes it lasts.
+it did not cover what the booth *does* for the twenty minutes it lasts. Now
+written up as its own section in
+[on-site-runbook.md](on-site-runbook.md#the-system-is-down-not-just-the-venue-network).
 
-- [ ] Decide the degraded-mode procedure and put it in the operator's hands: what
-      the staff say, whether addresses are collected on paper and entered later
-      (and if so, under which consent wording — the entry agreement is collected
-      on screen, so paper needs its own answer), and who decides to switch.
-- [ ] Name the one person who makes that call, and how they are reached.
+- [x] **Decision (project owner, 2026-07-31): no paper fallback.** Staff tell
+      visitors entry is temporarily down and to try again shortly; nothing is
+      collected on paper, so the consent-wording question this would have
+      needed does not arise. Accepted as a real cost — a visitor who leaves
+      during the outage window is lost — in exchange for not building a second,
+      lower-fidelity intake path two weeks before the event.
+- [x] **Decision (project owner, 2026-07-31): the on-site operator decides,
+      on the spot.** No phone call, no waiting on the maintainer. Whoever is
+      running the booth judges whether to hold visitors a few minutes or wave
+      them on, and checks `/api/health` to know when it is over.
 
 ## Missing mechanisms
 
-### P1. No retention period, no deletion path (S2, by D-1 for the wording; the process can follow)
+### P1. No retention period, no deletion path (S2, by D-1 for the wording; the process can follow) — closed 2026-07-31
 
 The system collects email addresses, optional profile fields including date of
-birth, and marketing consent. Nothing states how long any of it is kept, and
-there is no procedure for "delete my entry" — an ordinary request under PIPEDA,
-and the event is in Toronto.
+birth, and marketing consent. Nothing stated how long any of it was kept, and
+there was no procedure for "delete my entry" — an ordinary request under
+PIPEDA, and the event is in Toronto. Full write-up, SQL and process in
+[data-privacy.md](data-privacy.md).
 
-- [ ] Write the retention period down, and the date the entrant data is deleted.
-- [ ] Write the deletion procedure, with the SQL, including the child rows
-      (`email_deliveries`, `email_outbox`, `verification_tokens`) that
-      [prelaunch-checklist.md](prelaunch-checklist.md) §7 already has to name for
-      the rehearsal teardown.
-- [ ] Decide who answers `info@chairman.jp` for such a request, and how fast.
-- [ ] A deletion before the draw removes an entry from the pool. Decide now
-      whether that is what happens, and say so in the terms if it is.
+- [x] **Retention (project owner, 2026-07-31): 90 days after the event,
+      2026-11-13.**
+- [x] Deletion procedure written, with SQL. Turned out simpler than
+      expected: `verification_tokens`, `email_outbox` and `email_deliveries`
+      all declare `on delete cascade` from `entry_id`, so only
+      `raffle_entries` itself needs handling by hand.
+- [x] `info@chairman.jp` requests are answered by the maintainer, within a
+      few business days — same as every other support path in
+      [on-site-runbook.md](on-site-runbook.md).
+- [x] **Decision (project owner, 2026-07-31): a pre-draw deletion request
+      does not remove the entry from the pool.** The row (and number, once
+      issued) is kept; the personal fields are anonymized in place. An
+      unverified request is deleted outright since no number was issued.
+      Not yet reflected in the public terms wording — see the note below.
+
+**Open follow-up, not urgent:** [lib/campaign/legal.ts](../../lib/campaign/legal.ts)
+does not currently state a retention period or describe the anonymize-not-remove
+behavior; it defers to the external LIVAPON Privacy Policy. Whether to add it
+here is a wording change under the live `jfca-2026-terms-v1` version, which
+[prelaunch-checklist.md](prelaunch-checklist.md) §5 says never to edit once
+real entries exist (five already do, from the maintainer's own dry run) —
+a new version would be needed if this is wanted before the event.
 
 ### P2. The unsubscribe promise has no implementation and no owner (S2, before any marketing mail is sent)
 
@@ -188,29 +267,34 @@ it — but it means the receiving system is not merely unnamed, it is unbudgeted
 - [ ] Name the platform the consented list goes to, and confirm it puts an
       unsubscribe link in every message.
 - [ ] Write down how the export reaches it, and who does that.
-- [ ] Do not send anything to that list until both are answered.
+- [x] **Decision (project owner, 2026-07-31): do not send anything to that
+      list until both are answered.** The platform itself stays undecided —
+      deliberately deferred to after the event rather than rushed now.
 
-### P3. Personal data has no map (S3, by D-1)
+### P3. Personal data has no map (S3, by D-1) — closed 2026-07-31
 
-Related to P1 and cheap once it is done: one table listing what is collected,
-where it lives, who can reach it, and what leaves the system (the CSV export, the
-two emails, the alert webhook — which is why alerts are redacted). Standard
-practice calls this a data map or ROPA; here it is a page, and it is what makes
-answering a question about the data possible without reading the schema.
+Written as the table in [data-privacy.md](data-privacy.md#the-personal-data-map):
+what is collected, where it lives, who can reach it, and what leaves the
+system (the CSV export, the alert webhook after redaction — the receipt email
+was removed in `0010`).
 
-### P4. One person holds every credential (S2, by D-3)
+### P4. One person holds every credential (S2, by D-3) — closed 2026-07-31
 
 Vercel, Supabase, Resend, GitHub, Cloudflare and DNS are all held by one account.
 The runbook already says to sign in on a second device before doors open, which
-addresses being locked out of the admin screens and nothing else.
+addresses being locked out of the admin screens and nothing else. Full access
+list in [data-privacy.md](data-privacy.md#access-who-holds-which-credential).
 
-- [ ] Write the access list: which service, which account, where the credential
+- [x] Access list written: which service, which account, where the credential
       is kept.
-- [ ] Decide what happens if that person is unreachable on the day, and give
-      somebody else enough to run the booth.
-- [ ] Note which secrets would have to be rotated afterwards if that access were
-      shared, and which cannot be (`RECEIPT_TOKEN_SECRET` is permanent — rotating
-      it breaks every receipt link already in an inbox).
+- [x] **Decision (project owner, 2026-07-31): nobody else gets standing
+      access.** A second credential holder was judged a bigger new risk for a
+      one-day event than the one it would solve. If the maintainer is
+      unreachable, the booth runs on what B7 already decided, not on new
+      access granted on the spot.
+- [x] Secrets that would need rotating if this is revisited, and the one that
+      cannot be rotated at all (`RECEIPT_TOKEN_SECRET`), listed in
+      data-privacy.md.
 
 ### P5. The browser suite still does not run in CI (S3, after the event)
 
@@ -261,14 +345,42 @@ is.
 
 ## Cleanups
 
-- **C1. The CSV export can truncate silently
-  ([#6](https://github.com/FUFU222/JFCA_2026_lucky_draw/issues/6), S2, worth
-  fixing before D).**
+- **C1. The CSV export can truncate silently — fixed 2026-07-31**
+  ([#6](https://github.com/FUFU222/JFCA_2026_lucky_draw/issues/6), S2).
   [app/admin/entries/export/route.ts](../../app/admin/entries/export/route.ts)
-  streams the file, so a failure part-way through arrives as a 200 with a short
-  file. The row count is already known and recorded in the audit log but is never
-  compared against what was written. The operator cannot tell a complete export
-  from a truncated one, and the export is the draw pool.
+  streams the file, so a failure part-way through still arrives as a 200 with
+  a short file — that part cannot change without buffering the whole export,
+  which is what streaming was chosen to avoid. What changed: the route now
+  counts rows as it writes them and, on any mismatch against the count taken
+  at the start, calls `reportServerError` — the same path B5's alert webhook
+  already listens to, once it is wired up. The operator finds out instead of
+  trusting a short file. Two new tests cover the mismatch and the matching
+  case. Issue #6 can be closed.
+- **C5. A resend clicked inside its own cooldown silently spent one of the
+  visitor's five daily attempts for nothing — fixed 2026-07-31.** Found during
+  a QA simulation of the full visitor journey. `claim_verification_send`
+  (supabase/migrations/0002) refuses a send inside its 2-minute cooldown or
+  past 3 sends per token, but that refusal happens *after*
+  `consumeRequestAllowance` had already spent one of the address's 5 daily
+  attempts — so an anxious visitor who clicked **Send it again** a few
+  seconds after the original submission (very plausible, especially under
+  B1's known mail-delivery delay) could burn through all 5 without ever
+  getting a second real email. A server-side fix was considered and rejected:
+  skipping the charge only when the server-side cooldown would block the send
+  is itself an oracle — the address counter would deplete normally for a
+  nonexistent or already-verified address, but never for a real pending one,
+  which is a way to enumerate live entries and undermines the same
+  non-disclosure guarantee the rest of this code goes out of its way to keep.
+  Fixed client-side instead:
+  [components/public/raffle-form.tsx](../../components/public/raffle-form.tsx)
+  now disables **Send it again** for the same 2 minutes the server would have
+  silently refused it, showing a live countdown instead of the click
+  appearing to do nothing. The server-side rate limiter is untouched — this
+  only stops the wasted click from being sent at all. `RESEND_COOLDOWN_SECONDS`
+  moved from `lib/raffle/service.ts` to `lib/raffle/limits.ts` so the client
+  component could import it without pulling in `node:crypto`. New test in
+  `tests/unit/raffle-form.test.tsx` covers the countdown and its re-arming on
+  an actual resend.
 - **C2. `hasCronSecret` exists twice
   ([#7](https://github.com/FUFU222/JFCA_2026_lucky_draw/issues/7)).**
   [lib/security/cron-auth.ts](../../lib/security/cron-auth.ts) and the copy inside

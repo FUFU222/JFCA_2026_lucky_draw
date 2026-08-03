@@ -224,6 +224,16 @@ Test-mode entries are the one exception —
 they are exempt from both the schedule and this cut-off on purpose, so a
 rehearsal works before opening and after closing.
 
+## 6a. Closing the gap a local QA pass could not reach
+
+A 2026-07-31 QA simulation walked the visitor journey end to end locally but
+could not reach the admin dashboard (a local-environment quirk, not an app
+bug). [qa-verification-checklist.md](qa-verification-checklist.md) sequences
+what remains — the dashboard controls, test-mode rehearsal, CSV export, and
+a rate-limit exhaustion check that is not written down anywhere else — against
+the rehearsal mechanics section 7 below already documents. Do it once before
+D-2.
+
 ## 7. Rehearsing on production without touching the draw
 
 Two tools, for two different jobs. Neither can add a number to the real draw.

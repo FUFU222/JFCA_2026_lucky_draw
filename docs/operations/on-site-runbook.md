@@ -40,6 +40,33 @@ IP**.
   before raising it again.
 - The per-address limit of 5 is what actually protects a person. Leave it alone.
 
+## The system is down, not just the venue network
+
+The section above is about the venue's shared IP addresses tripping the rate
+limiter — the fix there is raising a limit, and the system itself is fine.
+This section is different: Supabase itself is unreachable, and the rate
+limiter fails closed, so every visitor sees **"Too many attempts"** with no
+mention of an outage. Check **/api/health** or Supabase's own status first —
+if the database is genuinely down, raising a rate limit changes nothing.
+
+**Decision (2026-07-31): no paper fallback.** Entries are not collected on
+paper during an outage. The wording gap that creates — an ordinary
+"too many attempts" message with no outage explanation — is accepted for
+now; see [readiness-gaps.md](readiness-gaps.md) B7. If it happens:
+
+1. Tell visitors plainly that entry is temporarily down and to try again in
+   a few minutes — a real sentence, not the on-screen error text.
+2. **You decide, on the spot.** There is no call to make first. Keep
+   scanning people through if the queue can wait a few minutes at the side;
+   wave people on to the rest of the festival if it looks like it will run
+   long, and tell them to come back.
+3. Check **/api/health** every few minutes. Once it reads `"status":"ok"`
+   again, entries work immediately — nothing needs restarting on your side.
+4. If it runs past 20–30 minutes, that is no longer "the system is
+   flaky today" — treat it as a real incident: note the time it started, and
+   mention it in [HANDOFF.md](../HANDOFF.md) or a fresh issue afterwards even
+   if it resolved itself.
+
 ## Someone did not get their email
 
 1. Search their address under **応募一覧**. If nothing is found, they mistyped it
@@ -131,6 +158,28 @@ use for this event.
 After you close, anyone who opens a confirmation link they never used is told
 **Entries are closed**, on the link's own page. They are not sent back to the
 form to try again, because that would only meet the same wall one tap later.
+
+### 6a. The moment intake closes, before the draw
+
+**受付を終了 the moment you press it, take a second copy of the pool — before
+the draw, before anything else.** The production database has no automatic
+backup (see [backup-restore.md](backup-restore.md)); the CSV export is the
+independent copy that survives whatever happens to Supabase between now and
+the draw.
+
+1. **応募一覧 → CSVをエクスポート**, immediately.
+2. If you can, also run the database dump from
+   [backup-restore.md](backup-restore.md) (`pnpm exec supabase db dump
+   --linked --data-only --use-copy -f data.sql --yes`) on whatever machine
+   has the CLI linked. It needs no password.
+3. Put both somewhere that is not this laptop alone — a second copy on a
+   drive or a cloud folder you control.
+
+This is separate from the final export in [After the
+event](#after-the-event): that one happens once the outbox is empty and the
+event is fully wound down. This one happens first, in the minute after
+closing, because the risk it guards against is everything that could go
+wrong between closing and going home.
 
 ### What the state line means
 
