@@ -83,6 +83,43 @@ function readDraft(eventSlug: string): Draft {
   }
 }
 
+type Cooldown = { email: string; availableAt: number };
+
+/**
+ * Session storage, not component state, because the cooldown this guards
+ * against is the server's — a reload mid-window must not forget it. Without
+ * this, a visitor whose page refreshed (a dropped venue-wifi connection, an
+ * accidental pull-to-refresh) could retype the same address into the primary
+ * form and hit `submitEntry`, which spends the same daily allowance the
+ * resend button already protects, on a send the server will silently no-op
+ * for the same reason.
+ */
+function cooldownKey(eventSlug: string) {
+  return `livapon:lucky-draw:${eventSlug}:cooldown`;
+}
+
+function readCooldown(eventSlug: string): Cooldown | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const stored = window.sessionStorage.getItem(cooldownKey(eventSlug));
+    if (!stored) return null;
+    const parsed = JSON.parse(stored) as Partial<Cooldown>;
+    if (typeof parsed.email !== 'string' || typeof parsed.availableAt !== 'number') return null;
+    return parsed.availableAt > Date.now() ? { email: parsed.email, availableAt: parsed.availableAt } : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCooldown(eventSlug: string, cooldown: Cooldown) {
+  try {
+    window.sessionStorage.setItem(cooldownKey(eventSlug), JSON.stringify(cooldown));
+  } catch {
+    // A browser with storage disabled loses the reload guard, not the
+    // server-side limit itself — the visitor can still enter.
+  }
+}
+
 export interface RaffleFormProps {
   eventSlug: string;
   turnstileSiteKey: string;
@@ -125,23 +162,44 @@ export function RaffleForm({
   const [error, setError] = useState<string | null>(null);
   const [resendNote, setResendNote] = useState<string | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
-  // Epoch ms. Set the moment a send succeeds — the original submission is a
-  // send too, so the very first "Send it again" press is already inside the
-  // server's cooldown window.
+  // Epoch ms, plus the address it belongs to. Set the moment a send
+  // succeeds — the original submission is a send too, so the very first
+  // "Send it again" press is already inside the server's cooldown window.
+  // Mirrored to session storage (see `writeCooldown`) so a reload does not
+  // forget it — the primary form's email field reaches the exact same server
+  // no-op the resend button guards against, once its address matches.
   const [resendAvailableAt, setResendAvailableAt] = useState<number | null>(null);
+  const [cooldownEmail, setCooldownEmail] = useState<string | null>(null);
   const [nowTick, setNowTick] = useState<number>(() => Date.now());
 
-  // Only ticks while a cooldown is actually showing, so the rest of the page
-  // is not re-rendering once a second for no reason.
+  function armCooldown(email: string) {
+    const availableAt = Date.now() + RESEND_COOLDOWN_SECONDS * 1000;
+    setResendAvailableAt(availableAt);
+    setCooldownEmail(email);
+    writeCooldown(eventSlug, { email, availableAt });
+  }
+
+  // Only ticks while a cooldown is actually showing, and stops itself the
+  // moment it expires rather than waiting for some other state change to
+  // tear the effect down — otherwise this would re-render the whole form
+  // once a second for as long as the acknowledgement screen stayed open.
   useEffect(() => {
     if (resendAvailableAt === null) return;
-    const id = setInterval(() => setNowTick(Date.now()), 1000);
+    const id = setInterval(() => {
+      const now = Date.now();
+      setNowTick(now);
+      if (now >= resendAvailableAt) clearInterval(id);
+    }, 1000);
     return () => clearInterval(id);
   }, [resendAvailableAt]);
 
   const resendWaitSeconds =
     resendAvailableAt === null ? 0 : Math.max(0, Math.ceil((resendAvailableAt - nowTick) / 1000));
-  const resendOnCooldown = resendWaitSeconds > 0;
+  // Scoped to the address the cooldown was armed for: changing the email on
+  // the form (or a resend, which never changes it) both key off this rather
+  // than off `resendAvailableAt` alone.
+  const onCooldown =
+    resendWaitSeconds > 0 && cooldownEmail !== null && cooldownEmail === draft.email.trim();
 
   // The draft is read after mounting, never during the first render: the server
   // cannot see session storage, and rendering a different value here would make
@@ -159,6 +217,12 @@ export function RaffleForm({
     // A visitor who already filled these in and then reloaded must not find
     // their own answers hidden behind a collapsed section.
     if (PROFILE_FIELDS.some((field) => stored[field] !== EMPTY_DRAFT[field])) setProfileOpen(true);
+
+    const cooldown = readCooldown(eventSlug);
+    if (cooldown) {
+      setResendAvailableAt(cooldown.availableAt);
+      setCooldownEmail(cooldown.email);
+    }
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [eventSlug]);
 
@@ -176,8 +240,14 @@ export function RaffleForm({
 
   const emailLooksUsable = /.+@.+\..+/.test(draft.email.trim());
   // Test mode never renders the widget below, so there is no token to wait on.
+  // `!onCooldown` matters here as much as it does on the resend button below:
+  // this same address hitting submit again is the same server no-op.
   const canSend =
-    (isTestMode || Boolean(captchaToken)) && emailLooksUsable && draft.consent && status !== 'sending';
+    (isTestMode || Boolean(captchaToken)) &&
+    emailLooksUsable &&
+    draft.consent &&
+    status !== 'sending' &&
+    !onCooldown;
 
   async function post(path: string, body: Record<string, unknown>) {
     setError(null);
@@ -230,7 +300,7 @@ export function RaffleForm({
     if (!accepted) return;
     setStatus('submitted');
     setScreen('submitted');
-    setResendAvailableAt(Date.now() + RESEND_COOLDOWN_SECONDS * 1000);
+    armCooldown(draft.email.trim());
     try {
       window.sessionStorage.removeItem(draftKey(eventSlug));
     } catch {
@@ -250,7 +320,7 @@ export function RaffleForm({
     setStatus('submitted');
     if (accepted) {
       setResendNote(submitted.resendDone);
-      setResendAvailableAt(Date.now() + RESEND_COOLDOWN_SECONDS * 1000);
+      armCooldown(draft.email.trim());
     }
   }
 
@@ -293,7 +363,7 @@ export function RaffleForm({
           // exact click anyway (see the note above `formatCooldown`), and
           // disabling it here is what stops that from also costing one of
           // the visitor's five daily attempts for nothing.
-          disabled={status === 'sending' || dialog === 'resend' || resendOnCooldown}
+          disabled={status === 'sending' || dialog === 'resend' || onCooldown}
           onClick={() => {
             // A fresh challenge every time the dialog opens. A token left over
             // from a cancelled attempt is spendable for a few minutes and then
@@ -310,7 +380,7 @@ export function RaffleForm({
             {status === 'sending' && <Spinner />}
             {status === 'sending'
               ? t.submitting
-              : resendOnCooldown
+              : onCooldown
                 ? `${submitted.resendWait} ${formatCooldown(resendWaitSeconds)}`
                 : submitted.resend}
           </span>
@@ -598,7 +668,11 @@ export function RaffleForm({
         >
           <span className="inline-flex items-center justify-center gap-2">
             {status === 'sending' && <Spinner />}
-            {status === 'sending' ? t.submitting : t.submit}
+            {status === 'sending'
+              ? t.submitting
+              : onCooldown
+                ? `${submitted.resendWait} ${formatCooldown(resendWaitSeconds)}`
+                : t.submit}
           </span>
         </button>
       </section>

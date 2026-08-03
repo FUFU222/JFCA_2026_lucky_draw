@@ -520,4 +520,33 @@ describe('resend', () => {
       screen.getByRole('button', { name: /You can request another in/ }),
     ).toBeDisabled();
   });
+
+  it('keeps the same cooldown after a reload, so retyping the address into the primary form cannot spend the attempt the server would silently drop', async () => {
+    const { unmount } = renderForm();
+    await fillAndOpenDialog('reload-check@example.com');
+    confirmInDialog('Send email');
+    await screen.findByRole('heading', { name: 'Check your email' });
+
+    // The draft itself is cleared on a successful submission — session
+    // storage keeps only the cooldown, not the form fields — so a reload
+    // lands back on an empty form, same as a real one would.
+    unmount();
+    renderForm();
+    expect(screen.getByRole('heading', { name: 'Get your Lucky Draw number' })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/Email address/), {
+      target: { value: 'reload-check@example.com' },
+    });
+    fireEvent.click(agreementCheckbox());
+    const submit = screen.getByRole('button', { name: /You can request another in/ });
+    expect(submit).toBeDisabled();
+
+    // A different address was never sent anything, so it is not on cooldown.
+    fireEvent.change(screen.getByLabelText(/Email address/), {
+      target: { value: 'someone-else@example.com' },
+    });
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Send confirmation email' })).toBeEnabled(),
+    );
+  });
 });
