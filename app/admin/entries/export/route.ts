@@ -8,6 +8,7 @@ import {
   loadDashboard,
 } from '../../../../lib/admin/queries';
 import { ACTIVE_CAMPAIGN_SLUG } from '../../../../lib/campaign/config';
+import { reportServerError } from '../../../../lib/observability/report';
 import { getOperatorSession } from '../../../../lib/security/operator-session';
 
 export const dynamic = 'force-dynamic';
@@ -39,12 +40,26 @@ export async function GET(request: Request) {
     async start(controller) {
       const encoder = new TextEncoder();
       controller.enqueue(encoder.encode(entryCsvHeader()));
+      let written = 0;
       try {
         for await (const page of exportEntryPages(campaignId)) {
-          for (const entry of page) controller.enqueue(encoder.encode(entryCsvRow(entry)));
+          for (const entry of page) {
+            controller.enqueue(encoder.encode(entryCsvRow(entry)));
+            written += 1;
+          }
+        }
+        // Headers are already sent as 200, so a short file still reaches the
+        // browser as a "successful" download — this is what makes the gap
+        // visible instead of silent. Never the rows themselves, only counts.
+        if (written !== rowCount) {
+          await reportServerError(
+            new Error(`CSV export wrote ${written} rows, expected ${rowCount}`),
+            { route: 'GET /admin/entries/export' },
+          );
         }
         controller.close();
       } catch (error) {
+        await reportServerError(error, { route: 'GET /admin/entries/export' });
         controller.error(error);
       }
     },

@@ -15,6 +15,7 @@ function pagesOf(...pages: unknown[][]) {
   };
 }
 const audit = vi.hoisted(() => ({ recordAudit: vi.fn() }));
+const observability = vi.hoisted(() => ({ reportServerError: vi.fn() }));
 
 vi.mock('../../lib/security/operator-session', () => ({
   getOperatorSession: session.getOperatorSession,
@@ -22,6 +23,7 @@ vi.mock('../../lib/security/operator-session', () => ({
 }));
 vi.mock('../../lib/admin/queries', () => queries);
 vi.mock('../../lib/admin/audit', () => audit);
+vi.mock('../../lib/observability/report', () => observability);
 
 import { GET as exportCsv } from '../../app/admin/entries/export/route';
 
@@ -109,6 +111,37 @@ describe('CSV export', () => {
     const body = await (await exportCsv(exportRequest())).text();
 
     expect(body.trim().split('\r\n')).toHaveLength(1);
+  });
+
+  it('reports a fault when fewer rows are streamed than were counted', async () => {
+    // The count PostgREST returned at the start disagrees with what actually
+    // streamed — the truncation this exists to catch, without a real error
+    // ever being thrown.
+    queries.countEntriesForExport.mockResolvedValue(2);
+    queries.exportEntryPages.mockImplementation(
+      pagesOf([{ number: 10_000, email: 'person@example.com' }]),
+    );
+
+    const response = await exportCsv(exportRequest());
+    await response.text();
+
+    expect(observability.reportServerError).toHaveBeenCalledTimes(1);
+    const [error, context] = observability.reportServerError.mock.calls[0];
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe('CSV export wrote 1 rows, expected 2');
+    expect(context).toEqual({ route: 'GET /admin/entries/export' });
+  });
+
+  it('does not report a fault when the streamed count matches', async () => {
+    queries.countEntriesForExport.mockResolvedValue(1);
+    queries.exportEntryPages.mockImplementation(
+      pagesOf([{ number: 10_000, email: 'person@example.com' }]),
+    );
+
+    const response = await exportCsv(exportRequest());
+    await response.text();
+
+    expect(observability.reportServerError).not.toHaveBeenCalled();
   });
 
   it('answers 404 for an event that does not exist, without auditing an export', async () => {
