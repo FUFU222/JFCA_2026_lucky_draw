@@ -128,7 +128,7 @@ describe('CSV export', () => {
     expect(observability.reportServerError).toHaveBeenCalledTimes(1);
     const [error, context] = observability.reportServerError.mock.calls[0];
     expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toBe('CSV export wrote 1 rows, expected 2');
+    expect((error as Error).message).toBe('CSV export wrote 1 rows, expected at least 2');
     expect(context).toEqual({ route: 'GET /admin/entries/export' });
   });
 
@@ -136,6 +136,25 @@ describe('CSV export', () => {
     queries.countEntriesForExport.mockResolvedValue(1);
     queries.exportEntryPages.mockImplementation(
       pagesOf([{ number: 10_000, email: 'person@example.com' }]),
+    );
+
+    const response = await exportCsv(exportRequest());
+    await response.text();
+
+    expect(observability.reportServerError).not.toHaveBeenCalled();
+  });
+
+  it('does not report a fault when more rows stream than were counted', async () => {
+    // `rowCount` is a snapshot taken before the stream starts; registration
+    // can still be open mid-event, so a later page can legitimately include
+    // an entry that did not exist yet when the count was taken. That is
+    // growth, not the truncation this check exists to catch.
+    queries.countEntriesForExport.mockResolvedValue(1);
+    queries.exportEntryPages.mockImplementation(
+      pagesOf([
+        { number: 10_000, email: 'person@example.com' },
+        { number: 10_001, email: 'late-arrival@example.com' },
+      ]),
     );
 
     const response = await exportCsv(exportRequest());

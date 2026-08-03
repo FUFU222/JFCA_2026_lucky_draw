@@ -51,9 +51,17 @@ export async function GET(request: Request) {
         // Headers are already sent as 200, so a short file still reaches the
         // browser as a "successful" download — this is what makes the gap
         // visible instead of silent. Never the rows themselves, only counts.
-        if (written !== rowCount) {
+        //
+        // Strictly fewer, not merely unequal: `rowCount` is a snapshot taken
+        // before the stream started, and registration can still be open while
+        // an operator exports mid-event, so a page fetched moments later can
+        // legitimately include entries that did not exist yet when the count
+        // was taken. That is growth, not truncation, and alerting on it would
+        // teach the webhook B5 just wired up to cry wolf on every export run
+        // during the exact window the event needs it to be trusted.
+        if (written < rowCount) {
           await reportServerError(
-            new Error(`CSV export wrote ${written} rows, expected ${rowCount}`),
+            new Error(`CSV export wrote ${written} rows, expected at least ${rowCount}`),
             { route: 'GET /admin/entries/export' },
           );
         }
