@@ -8,6 +8,25 @@ import { Spinner } from '../ui/spinner';
 import { PRIVACY_POLICY_URL } from '../../lib/campaign/legal';
 import { DEFAULT_COUNTRY, type CountryOption } from '../../lib/i18n/countries';
 import { messages } from '../../lib/i18n/messages';
+import { RESEND_COOLDOWN_SECONDS } from '../../lib/raffle/limits';
+
+/**
+ * The server enforces this for real (`claim_verification_send` in
+ * supabase/migrations/0002_raffle_entry_flow.sql) — a request inside the
+ * window is refused there regardless of what this component does. Disabling
+ * the button client-side only stops a visitor from spending one of their
+ * five daily attempts on a click that the server was always going to no-op,
+ * while showing the same "Check your email" acknowledgement either way. See
+ * the note on `RESEND_COOLDOWN_SECONDS` in lib/raffle/limits.ts for why the
+ * server-side counter cannot simply skip charging that click instead: doing
+ * so would let a resend loop distinguish a real pending entry from an
+ * unregistered address by whether it ever gets rate-limited.
+ */
+function formatCooldown(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
 
 type Draft = {
   firstName: string;
@@ -106,6 +125,23 @@ export function RaffleForm({
   const [error, setError] = useState<string | null>(null);
   const [resendNote, setResendNote] = useState<string | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
+  // Epoch ms. Set the moment a send succeeds — the original submission is a
+  // send too, so the very first "Send it again" press is already inside the
+  // server's cooldown window.
+  const [resendAvailableAt, setResendAvailableAt] = useState<number | null>(null);
+  const [nowTick, setNowTick] = useState<number>(() => Date.now());
+
+  // Only ticks while a cooldown is actually showing, so the rest of the page
+  // is not re-rendering once a second for no reason.
+  useEffect(() => {
+    if (resendAvailableAt === null) return;
+    const id = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [resendAvailableAt]);
+
+  const resendWaitSeconds =
+    resendAvailableAt === null ? 0 : Math.max(0, Math.ceil((resendAvailableAt - nowTick) / 1000));
+  const resendOnCooldown = resendWaitSeconds > 0;
 
   // The draft is read after mounting, never during the first render: the server
   // cannot see session storage, and rendering a different value here would make
@@ -194,6 +230,7 @@ export function RaffleForm({
     if (!accepted) return;
     setStatus('submitted');
     setScreen('submitted');
+    setResendAvailableAt(Date.now() + RESEND_COOLDOWN_SECONDS * 1000);
     try {
       window.sessionStorage.removeItem(draftKey(eventSlug));
     } catch {
@@ -211,7 +248,10 @@ export function RaffleForm({
       is_test: isTestMode,
     });
     setStatus('submitted');
-    if (accepted) setResendNote(submitted.resendDone);
+    if (accepted) {
+      setResendNote(submitted.resendDone);
+      setResendAvailableAt(Date.now() + RESEND_COOLDOWN_SECONDS * 1000);
+    }
   }
 
   if (screen === 'submitted') {
@@ -248,7 +288,12 @@ export function RaffleForm({
           // original target — and a second press bumps the round under a
           // mounted widget, which runs a second challenge against the shared
           // budget and can leave the earlier, now-invalid token in state.
-          disabled={status === 'sending' || dialog === 'resend'}
+          //
+          // Also disabled on cooldown: the server would silently no-op this
+          // exact click anyway (see the note above `formatCooldown`), and
+          // disabling it here is what stops that from also costing one of
+          // the visitor's five daily attempts for nothing.
+          disabled={status === 'sending' || dialog === 'resend' || resendOnCooldown}
           onClick={() => {
             // A fresh challenge every time the dialog opens. A token left over
             // from a cancelled attempt is spendable for a few minutes and then
@@ -263,7 +308,11 @@ export function RaffleForm({
         >
           <span className="inline-flex items-center justify-center gap-2">
             {status === 'sending' && <Spinner />}
-            {status === 'sending' ? t.submitting : submitted.resend}
+            {status === 'sending'
+              ? t.submitting
+              : resendOnCooldown
+                ? `${submitted.resendWait} ${formatCooldown(resendWaitSeconds)}`
+                : submitted.resend}
           </span>
         </button>
 

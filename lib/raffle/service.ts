@@ -3,7 +3,15 @@ import { randomUUID } from 'node:crypto';
 import { isRegistrationOpen } from '../campaign/config';
 import type { Campaign, RaffleEntry } from '../db/types';
 import { deriveReceiptToken, deriveVerificationToken, hashToken } from './tokens';
-import { RATE_LIMIT_WINDOW_SECONDS, emailRequestLimit, ipRequestLimit } from './limits';
+import {
+  MAX_VERIFICATION_SENDS,
+  RATE_LIMIT_WINDOW_SECONDS,
+  RESEND_COOLDOWN_SECONDS,
+  emailRequestLimit,
+  ipRequestLimit,
+} from './limits';
+
+export { MAX_VERIFICATION_SENDS, RESEND_COOLDOWN_SECONDS } from './limits';
 import {
   confirmRequestSchema,
   resendRequestSchema,
@@ -11,8 +19,6 @@ import {
 } from './validation';
 
 const TOKEN_LIFETIME_MS = 24 * 60 * 60 * 1000;
-export const RESEND_COOLDOWN_SECONDS = 2 * 60;
-export const MAX_VERIFICATION_SENDS = 3;
 
 /**
  * Raised when the database reports that a verification link cannot be used:

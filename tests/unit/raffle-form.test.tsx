@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { RaffleForm } from '../../components/public/raffle-form';
 import { countryOptions } from '../../lib/i18n/countries';
+import { RESEND_COOLDOWN_SECONDS } from '../../lib/raffle/limits';
 
 // One token per challenge, never a constant. Cloudflare refuses a response
 // token that has already been verified, which is the whole reason the widget
@@ -343,6 +344,22 @@ describe('draft recovery', () => {
 });
 
 describe('resend', () => {
+  // The real submission already counts as a send server-side, so the button
+  // is on cooldown the instant the acknowledgement screen appears — see
+  // resendAvailableAt in raffle-form.tsx. Fake timers with real-time
+  // advancement let `waitFor` keep working while the cooldown itself is
+  // skipped forward instantly instead of the test taking two real minutes.
+  beforeEach(() => {
+    // An explicit `now` matters: without it the fake clock starts at epoch 0,
+    // and `resendAvailableAt` (stamped from a real `Date.now()` inside the
+    // component) would then sit decades ahead of every tick this test drives.
+    vi.useFakeTimers({ shouldAdvanceTime: true, now: Date.now() });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('asks again before sending the link a second time', async () => {
     renderForm();
     await fillAndOpenDialog();
@@ -354,6 +371,9 @@ describe('resend', () => {
     // screen everybody sees carries no captcha at all.
     expect(screen.queryByTestId('turnstile-widget')).not.toBeInTheDocument();
 
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RESEND_COOLDOWN_SECONDS * 1000);
+    });
     const resend = screen.getByRole('button', { name: 'Send it again' });
     expect(resend).toBeEnabled();
     fireEvent.click(resend);
@@ -400,6 +420,9 @@ describe('resend', () => {
     confirmInDialog('Send email');
     await screen.findByRole('heading', { name: 'Check your email' });
 
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RESEND_COOLDOWN_SECONDS * 1000);
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Send it again' }));
     const dialog = await screen.findByRole('dialog');
 
@@ -418,6 +441,9 @@ describe('resend', () => {
     confirmInDialog('Send email');
     await screen.findByRole('heading', { name: 'Check your email' });
 
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RESEND_COOLDOWN_SECONDS * 1000);
+    });
     const resend = screen.getByRole('button', { name: 'Send it again' });
     fireEvent.click(resend);
     await screen.findByRole('dialog');
@@ -435,6 +461,10 @@ describe('resend', () => {
     confirmInDialog('Send email');
     await screen.findByRole('heading', { name: 'Check your email' });
 
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RESEND_COOLDOWN_SECONDS * 1000);
+    });
+
     fireEvent.click(screen.getByRole('button', { name: 'Send it again' }));
     const dialog = await screen.findByRole('dialog');
 
@@ -449,5 +479,45 @@ describe('resend', () => {
     fireEvent.click(cancel);
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('disables the resend button on cooldown instead of spending one of the five daily attempts on a click the server would silently drop', async () => {
+    renderForm();
+    await fillAndOpenDialog();
+    confirmInDialog('Send email');
+    await screen.findByRole('heading', { name: 'Check your email' });
+
+    // The original submission already counts as a send server-side
+    // (claim_verification_send), so the button must not invite an immediate
+    // second one.
+    expect(screen.queryByRole('button', { name: 'Send it again' })).not.toBeInTheDocument();
+    const waiting = screen.getByRole('button', { name: /You can request another in/ });
+    expect(waiting).toBeDisabled();
+    // Tolerant of the sub-second gap between mount and the submission
+    // actually completing — the tick that corrects it runs a second later.
+    expect(waiting).toHaveTextContent(/^You can request another in 2:0[01]$/);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(90 * 1000);
+    });
+    expect(screen.getByRole('button', { name: /You can request another in/ })).toHaveTextContent(
+      /^You can request another in 0:3[01]$/,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+    });
+    const resend = screen.getByRole('button', { name: 'Send it again' });
+    expect(resend).toBeEnabled();
+
+    // A real click starts the same cooldown over again.
+    fireEvent.click(resend);
+    await screen.findByRole('dialog');
+    confirmInDialog('Send again');
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(
+      screen.getByRole('button', { name: /You can request another in/ }),
+    ).toBeDisabled();
   });
 });
