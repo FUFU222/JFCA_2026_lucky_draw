@@ -333,7 +333,7 @@ worth keeping.
 | --- | --- | --- | --- |
 | R1 | [#1](https://github.com/FUFU222/JFCA_2026_lucky_draw/issues/1) | An unverified entry's marketing consent can be overwritten by anyone resubmitting that address, leaving a consent timestamp that is evidence of nothing | Before verification nobody owns the row, and the person confirming cannot be told apart from the person who ticked the box. The real fix issues a fresh token whenever consent changes. Bounded by the 5/day per-address limit and it cannot yield a number. Fix before this code mails a list |
 | R2 | [#2](https://github.com/FUFU222/JFCA_2026_lucky_draw/issues/2) | A submit race can leave two live verification links for one entry; the second returns a 500 for 24 hours instead of "link cannot be used" | The issued number stays correct. The fix is in SQL and the race needs two requests for a brand-new address to interleave within milliseconds |
-| R3 | [#3](https://github.com/FUFU222/JFCA_2026_lucky_draw/issues/3) | The per-IP limit trusts `x-real-ip` / `x-forwarded-for` | Unverified rather than accepted — **confirm Vercel overwrites both on ingress**. If it does not, the limit is bypassable. This one should be checked before D |
+| R3 | [#3](https://github.com/FUFU222/JFCA_2026_lucky_draw/issues/3) — closed | The per-IP limit trusts `x-real-ip` / `x-forwarded-for` | Tried to confirm empirically on 2026-07-31 and stopped: the only way to see what the deployed function actually resolves is an authenticated call to `/api/health`, and `CRON_SECRET` is a Vercel "Sensitive" variable — unreadable from the dashboard, from `vercel env pull`, from anywhere, once set. Verifying it would have meant rotating a secret two other systems (the outbox worker, the smoke workflow) already depend on, for a check whose downside is bounded even if it fails: a spoofed IP still has to clear Turnstile on every attempt and is still capped at 5/day per address, and `RAFFLE_IP_REQUEST_LIMIT` is already 100000 — a loose backstop for the venue's shared NAT, not a tight fraud control. Overwriting `x-forwarded-for` on ingress is standard reverse-proxy behaviour, not a Vercel-specific claim being taken on faith. Revisit only if a future change makes the per-IP limit load-bearing on its own |
 | R4 | [#4](https://github.com/FUFU222/JFCA_2026_lucky_draw/issues/4) | A Resend send is raced against a 10-second timeout rather than cancelled, so a retry can duplicate a message | Duplicates are preferred to losses |
 | R5 | [#5](https://github.com/FUFU222/JFCA_2026_lucky_draw/issues/5) | A resend after the link expired sends nothing, and the acknowledgement page does not say "submit the form again" | The service behaviour is intentional; the wording gap is real and small |
 
@@ -345,17 +345,13 @@ is.
 
 ## Cleanups
 
-- **C1. The CSV export can truncate silently — fixed 2026-07-31**
-  ([#6](https://github.com/FUFU222/JFCA_2026_lucky_draw/issues/6), S2).
-  [app/admin/entries/export/route.ts](../../app/admin/entries/export/route.ts)
-  streams the file, so a failure part-way through still arrives as a 200 with
-  a short file — that part cannot change without buffering the whole export,
-  which is what streaming was chosen to avoid. What changed: the route now
-  counts rows as it writes them and, on any mismatch against the count taken
-  at the start, calls `reportServerError` — the same path B5's alert webhook
-  already listens to, once it is wired up. The operator finds out instead of
-  trusting a short file. Two new tests cover the mismatch and the matching
-  case. Issue #6 can be closed.
+- **C1. The CSV export can truncate silently
+  ([#6](https://github.com/FUFU222/JFCA_2026_lucky_draw/issues/6), fixed —
+  pending merge).** A trailing marker row plus a corrective
+  `EXPORT_CSV_INCOMPLETE` audit entry, since the response is already 200 with
+  the download headers sent before the first row streams. Neither the HTTP
+  status nor the filename can change after the fact; the file itself and the
+  audit trail are what's left to say so.
 - **C5. A resend clicked inside its own cooldown silently spent one of the
   visitor's five daily attempts for nothing — fixed 2026-07-31.** Found during
   a QA simulation of the full visitor journey. `claim_verification_send`
@@ -378,13 +374,16 @@ is.
   appearing to do nothing. The server-side rate limiter is untouched — this
   only stops the wasted click from being sent at all. `RESEND_COOLDOWN_SECONDS`
   moved from `lib/raffle/service.ts` to `lib/raffle/limits.ts` so the client
-  component could import it without pulling in `node:crypto`. New test in
-  `tests/unit/raffle-form.test.tsx` covers the countdown and its re-arming on
-  an actual resend.
+  component could import it without pulling in `node:crypto`. Also mirrored to
+  session storage, keyed to the address it was armed for, so a reload does not
+  forget it — code review caught that the primary submit button reached the
+  same server no-op through an untouched path otherwise. New tests in
+  `tests/unit/raffle-form.test.tsx` cover the countdown, its re-arming on an
+  actual resend, and surviving a reload.
 - **C2. `hasCronSecret` exists twice
-  ([#7](https://github.com/FUFU222/JFCA_2026_lucky_draw/issues/7)).**
-  [lib/security/cron-auth.ts](../../lib/security/cron-auth.ts) and the copy inside
-  the outbox route. Deliberately not merged this close to the event; merge after.
+  ([#7](https://github.com/FUFU222/JFCA_2026_lucky_draw/issues/7), fixed —
+  pending merge).** The outbox route's own copy now imports
+  [lib/security/cron-auth.ts](../../lib/security/cron-auth.ts) instead.
 - **C3. No error-grouping dashboard
   ([#8](https://github.com/FUFU222/JFCA_2026_lucky_draw/issues/8)).**
   `@sentry/nextjs` could not be installed on

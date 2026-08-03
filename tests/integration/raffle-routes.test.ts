@@ -71,7 +71,8 @@ describe('entry route', () => {
   it.each([
     ['invalid', 400, 'invalid_request'],
     ['turnstile', 403, 'captcha_failed'],
-    ['rate_limited', 429, 'try_again_later'],
+    ['rate_limited_network', 429, 'try_again_later'],
+    ['rate_limited_address', 429, 'try_again_later_address'],
     ['closed', 403, 'registration_unavailable'],
   ])('maps the %s outcome to %i', async (reason, status, error) => {
     service.requestVerification.mockResolvedValue({ accepted: false, reason });
@@ -130,7 +131,7 @@ describe('resend route', () => {
   });
 
   it('answers a rate-limited resend with the retry outcome', async () => {
-    service.resendVerification.mockResolvedValue({ accepted: false, reason: 'rate_limited' });
+    service.resendVerification.mockResolvedValue({ accepted: false, reason: 'rate_limited_network' });
 
     const response = await resend(
       post('/api/campaigns/jfca-2026/entries/resend', {

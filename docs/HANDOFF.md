@@ -28,7 +28,9 @@ and never says who won.
 - **Admin pages are Japanese only**, at `/admin`, restricted to `@chairman.jp`
   by Supabase magic link.
 - QR target: `https://luckydraw.livapon.com/jfca-2026`. Campaign `jfca-2026`,
-  Japan Festival Canada 2026, `America/Toronto`.
+  Japan Festival Canada 2026, `America/Toronto`. **The event is Saturday
+  15 August 2026** — a single day, which is why nothing here is built to run
+  unattended.
 - One case-insensitive address per campaign. Confirmation links expire in 24
   hours; at most 3 sends per token in 24 hours, 2 minutes apart.
 - **Intake is opened and closed by hand.** `opens_at` and `draw_starts_at` are
@@ -40,17 +42,17 @@ and never says who won.
 
 | Path | What lives there |
 | --- | --- |
-| `app/[eventSlug]/` | The visitor's four pages: form, verify, number, terms |
+| `app/[eventSlug]/` | The visitor's five pages: form, verify, number, terms, lookup |
 | `app/admin/` | Dashboard, entry search, CSV export, campaign controls, design preview |
-| `app/api/campaigns/` | The three public writes (entry, resend, confirm) |
+| `app/api/campaigns/` | The four public writes (entry, resend, confirm, lookup) |
 | `app/api/internal/email-outbox/` | Retry worker endpoint, called by GitHub Actions |
 | `lib/raffle/service.ts` | The state machine. Every decision about who gets a number is here |
 | `lib/db/server.ts` | The Supabase adapter, `server-only`, service-role |
 | `lib/admin/` | Dashboard queries, audit log, CSV |
 | `lib/security/` | Operator session, `@chairman.jp` check, Turnstile |
 | `lib/config/startup.ts` | Boot-time configuration guard, via `instrumentation.ts` |
-| `supabase/migrations/` | 0001–0009. The RPCs are where the concurrency safety lives |
-| `emails/` | React Email templates, English only |
+| `supabase/migrations/` | 0001–0010. The RPCs are where the concurrency safety lives |
+| `emails/` | React Email templates, English only — verification only, since `0010` |
 
 ## The parts that are easy to get wrong
 
@@ -120,6 +122,24 @@ and the "irreversible" outcome is precisely the one the visitor came for — a
 dialog there only restated the page and put a tap between the visitor and their
 number. Do not add one back for consistency.
 
+**"Find my number" (`/{eventSlug}/lookup`) discloses a real, issued number to
+whoever holds the address, no proof beyond that.** An accepted risk, decided
+2026-07-31, not an oversight: the alternative was emailing the number back
+instead of showing it, which the team chose against to avoid a second message
+per lookup, having weighed that pickup is by screen at the venue regardless —
+so the lookup does not change who can walk up with a number already in hand,
+only how they got it onto a screen. Two rate limits are the whole backstop
+(`RAFFLE_LOOKUP_EMAIL_REQUEST_LIMIT`, default 5/day per address;
+`RAFFLE_LOOKUP_IP_REQUEST_LIMIT`, default 1000/day, sized like the entry
+form's for the same venue-NAT reason), in their own bucket so a burst of
+lookups can never spend the allowance a real entrant needs to submit or
+resend, and the reverse. `RaffleService.lookupNumber` never checks
+`isRegistrationOpen` — deliberately, since a visitor is most likely to need
+this right around the draw, after intake has closed. The one thing it still
+will not disclose is the difference between "no such address" and "entered
+but not confirmed yet" — both answer identically, so a lookup cannot be used
+to learn who has entered but not verified.
+
 ## Test mode, in full
 
 Added because rehearsing the journey previously meant creating real entries.
@@ -158,9 +178,9 @@ with their audit rows; search, CSV export and the preview page.
 Five defects were found and fixed in `cf1c1d6` — that commit message describes
 each one and why it mattered.
 
-`pnpm test` is 210 cases across 24 files. `pnpm test:e2e` is 20 Playwright
-specs: 5 public journey, 7 admin, and 8 read-only production smoke that only run
-when `SMOKE_BASE_URL` is set — so a local run reports 12.
+`pnpm test` is 260 cases across 27 files. `pnpm test:e2e` is 22 Playwright
+specs: 6 public journey, 7 admin, and 9 read-only production smoke that only run
+when `SMOKE_BASE_URL` is set — so a local run reports 13.
 
 ## Open items
 

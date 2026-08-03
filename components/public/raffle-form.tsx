@@ -463,9 +463,14 @@ export function RaffleForm({
           way the section keeps the heading a screen reader can navigate to,
           exactly as it had before it became collapsible.
         */}
-        <summary className="-mx-4 -my-3 cursor-pointer list-none px-4 py-3 text-neutral-900 [&::-webkit-details-marker]:hidden">
-          <h2 className="flex items-center gap-2 text-[15px] font-bold">
-            <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-[var(--brand-accent)]" />
+        <summary className="-mx-4 -my-3 cursor-pointer list-none px-4 py-3 text-neutral-700 [&::-webkit-details-marker]:hidden">
+          {/*
+            No accent dot here, unlike the heading below: that marker is the
+            page's one "this is the actual action" signal, and putting it on
+            both headings made the optional, collapsed section compete with it
+            for attention instead of visibly taking a back seat.
+          */}
+          <h2 className="flex items-center gap-2 text-[15px] font-semibold">
             {/* One text flow, so "(Optional)" wraps with the heading instead of
                 being pushed against the chevron on a narrow screen. */}
             <span className="min-w-0 flex-1">
@@ -579,7 +584,7 @@ export function RaffleForm({
 
       <section className="space-y-4">
         <div>
-          <h2 className="flex items-center gap-2 text-xl font-bold text-neutral-900">
+          <h2 className="flex items-center gap-2 text-2xl font-bold text-neutral-900">
             <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-[var(--brand-accent)]" />
             {t.numberHeading}
           </h2>
@@ -629,10 +634,7 @@ export function RaffleForm({
             checked={draft.marketing}
             onChange={(event) => set('marketing', event.target.checked)}
           />
-          <span>
-            {t.marketing}
-            <span className="mt-0.5 block text-sm text-neutral-500">{t.marketingOptional}</span>
-          </span>
+          <span>{t.marketing}</span>
         </label>
 
         {!isTestMode && (
@@ -771,6 +773,8 @@ function errorFor(code: string | undefined, status: number, t: typeof messages.f
       return t.captchaFailed;
     case 'try_again_later':
       return t.errorRateLimited;
+    case 'try_again_later_address':
+      return t.errorRateLimitedAddress;
     case 'registration_unavailable':
       return t.errorClosed;
     case 'invalid_request':

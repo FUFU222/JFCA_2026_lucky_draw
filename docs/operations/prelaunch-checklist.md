@@ -1,5 +1,9 @@
 # Lucky Draw pre-launch checklist
 
+**The event is Saturday 15 August 2026, in Toronto (`America/Toronto`).**
+Everything dated in this file is relative to that: the Resend teardown, the
+rate-limit request, and every "before the event" below.
+
 Work top to bottom. Nothing below the QR line may be skipped: once a code is
 printed, the URL it points at cannot be changed.
 
@@ -75,35 +79,70 @@ step in [on-site-runbook.md](on-site-runbook.md). Cancel by **2026-08-31**.
 
       So: stay on 50K, watch the number during the day, and move up only if
       the volume genuinely arrives. The whole downside of guessing low is $9.
-- [ ] **Confirm a valid card is on file**, because that is what the automatic
+- [x] **Confirm a valid card is on file**, because that is what the automatic
       overage charge draws on. It is the one way the quota can actually stop
       the event: a declined card and the pause is not about volume any more.
-- [ ] **Ask Resend to raise the API rate limit.** The default is **10 requests
-      per second per team** (Settings → Usage shows the team's current value —
-      read it there rather than assuming). It does not vary by plan.
+      Confirmed 2026-07-30, on Pro.
+- [x] **Ask Resend to raise the API rate limit.** Requested 2026-07-30,
+      **granted the same day at 25 req/s** — half of the 50 asked for, and
+      accepted rather than chased further; see the reasoning below.
 
-      **This is the opposite of the plan tier above, and it is why it has to
-      be done in advance.** The quota is soft, self-serve and reversible; the
-      rate limit is a hard 429, cannot be changed from the dashboard, and
-      needs a human at Resend support to grant it. There is no version of
-      raising it at two in the afternoon with a queue at the booth.
+      Sent through Settings → Usage → the help panel → **Talk to an expert**,
+      at priority Medium. Turnaround was under an hour.
 
-      **Ask for 50/s.** Both messages are sent inline as visitors arrive, so
-      30,000 entrants across a seven-hour day averages only ~2.4/s — but that
-      is the average. Festival arrivals cluster, and a three-to-four-times
-      peak puts the booth at 7–10/s, i.e. at the default ceiling with no
-      margin at the exact moment a queue is forming.
+      **Why 25 is enough, not just what was offered.** 30,000 entrants over a
+      seven-hour day, two messages each (today's architecture — see the
+      receipt-email item elsewhere in this file for the pending change to
+      one), average ~2.4 req/s; a generous 3-4x arrival peak puts the booth at
+      7-10 req/s. 25 req/s leaves 2.6-3.5x headroom over that peak, not a
+      ceiling with no margin the way the 10 req/s default was. The original
+      ask of 50 was deliberately padded past the realistic peak precisely
+      because the granted number was unknown; now that it is known and
+      already comfortable, squeezing for the rest returns little for the
+      goodwill and time it costs a small support team. Re-open this if the
+      receipt-email removal does *not* land before the event — that change
+      roughly halves the volume and widens the margin further, so its absence
+      is the one thing that would call for asking again.
 
-      What makes this worth over-asking for: a 429 is not handled specially
-      anywhere in the mail layer. It is an ordinary failure, so the message
-      falls to `email_outbox` and waits for the retry worker — which asks for
-      five minutes and really runs about every 88. The visitor standing at the
-      booth gets nothing, and their own **Send it again** hits the same
-      ceiling. The rate limit is the critical path here, not a backstop.
-- [ ] Verify the sending domain for `info@chairman.jp`: SPF and DKIM records
-      published, and DMARC checked if the domain has a policy.
-- [ ] Send one test message to a Gmail address and one to an Outlook address, and
-      confirm both land outside spam.
+      **Declined the suggested Batch endpoint** (up to 100 messages per API
+      call). It does not fit how mail is sent here: each message is triggered
+      by one visitor's real action and sent inline at that instant — mail is
+      "inline first, durable second" by design (see HANDOFF.md), specifically
+      to avoid queuing delay. Batching would mean holding messages to
+      accumulate a batch, which is the delay this architecture exists to
+      avoid, for a rate-limit problem 25 req/s already solves.
+- [x] **Verify the sending domain for `info@chairman.jp`.** Checked against
+      live DNS on 2026-07-30, not against the dashboard's own status:
+
+      - `resend._domainkey.chairman.jp` — DKIM public key published, so the
+        signature carries `d=chairman.jp` and aligns with the From domain.
+      - `send.chairman.jp` — `v=spf1 include:amazonses.com ~all` plus an MX to
+        `feedback-smtp.us-east-1.amazonses.com`. This is the Return-Path
+        domain, and it is the one SPF is actually evaluated against.
+      - `chairman.jp` root SPF is `include:_spf.google.com` only, and **that is
+        correct — do not add amazonses to it.** SPF authenticates the envelope
+        sender, which is `send.chairman.jp`, not the From header. Adding SES to
+        the root would authorise Resend to send as ordinary company mail for no
+        benefit.
+      - DMARC is `p=none` with `rua=mailto:postmaster@chairman.jp`. Monitoring
+        only, which is the right setting to be sending 60,000 messages under:
+        nothing legitimate can be rejected by our own policy.
+- [x] **Fixed the leading tab in the DMARC record**, 2026-07-30. The
+      published value had a literal tab before `v=DMARC1`, which some
+      evaluators trim and some do not — a coin flip on whether the policy was
+      seen at all. **Editing the record in place did not remove it**;
+      Squarespace's editor appears to insert one on save regardless of what
+      is typed. Deleting the record and recreating it from scratch did.
+      Confirmed clean against all four authoritative nameservers
+      (`ns-cloud-c{1..4}.googledomains.com`) — DNS for `chairman.jp` is at
+      Squarespace, not in any GCP project, despite those nameserver names.
+- [x] **Gmail and iCloud confirmed landing outside spam**, 2026-07-30 —
+      repeated real sends, not a one-off. **Outlook was not tested**: a
+      decision to skip it and accept the risk, made 2026-07-30 rather than a
+      gap nobody noticed. Worth revisiting only if time allows before the
+      event; if an Outlook entrant reports missing mail on the day, the
+      remedy is the same as a mistyped address — spam folder, then the
+      operator looks the entry up in 応募一覧.
 - [ ] Confirm the sender renders as `LIVAPON <info@chairman.jp>`.
 
 ## 3. Cloudflare Turnstile
@@ -156,8 +195,16 @@ step in [on-site-runbook.md](on-site-runbook.md). Cancel by **2026-08-31**.
       person; leave it alone. A value that will not parse is refused at boot
       rather than falling back to the default, so a typo here is a failed
       deploy instead of a venue locked out mid-event.
-- [ ] Run the load test **without** raising the limit further, so it measures
-      what the venue will actually experience.
+- [x] **The HTTP-level load test was not run — a reasoned decision, not a gap.**
+      See [staging.md](staging.md#load-test--not-run-for-this-event-and-why-that-is-a-reasoned-call)
+      for the full reasoning. In short: the property it exists to prove is
+      structurally guaranteed by a row lock, not empirically, and is now
+      exercised directly at 80-way concurrency in
+      `tests/integration/raffle-repository.test.ts`, at zero cost; the event's
+      actual traffic ceiling is nowhere near the test's 100 req/s target; and
+      the Free-tier 2-project limit made standing up a second cloud Supabase
+      project cost real money or disrupt another live project for a question
+      already answered. Decided 2026-07-30.
 
 ## 5. Legal and content
 

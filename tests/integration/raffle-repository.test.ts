@@ -652,6 +652,61 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
     ).resolves.toBeNull();
   });
 
+  it('issues N distinct sequential numbers to N distinct entrants confirming at once, with no duplicates', async () => {
+    // Not the same property as the two tests above, which race repeats of one
+    // link or one address against themselves. This is the property a load
+    // test would actually be checking: many different people hitting the same
+    // counter at the same instant. `confirm_raffle_verification` locks the
+    // campaign row with `select ... for update`, which is a structural
+    // guarantee from Postgres that writers to that row serialize regardless of
+    // how many arrive at once — this does not prove it holds at N=80 by
+    // sampling, it demonstrates the same mechanism that holds at any N, well
+    // past the concurrency this event will ever see.
+    const CONCURRENCY = 80;
+    const campaign = await createOpenCampaign();
+    const mailer = new FakeMailer();
+    const service = buildService(mailer);
+
+    await Promise.all(
+      Array.from({ length: CONCURRENCY }, (_, index) =>
+        service.requestVerification({
+          eventSlug: campaign.slug,
+          email: `burst-${index}-${uniqueSuffix()}@example.com`,
+          termsConsent: true,
+          turnstileToken: 'captcha',
+        }),
+      ),
+    );
+
+    expect(mailer.verification).toHaveLength(CONCURRENCY);
+    const started = performance.now();
+    const results = await Promise.all(
+      mailer.verification.map(({ token }) => service.confirmVerification({ eventSlug: campaign.slug, token })),
+    );
+    const elapsedMs = performance.now() - started;
+
+    const numbers = results.map((result) => result?.number);
+    expect(numbers.every((number) => number !== undefined)).toBe(true);
+    // A Set collapses duplicates; if the lock had ever let two confirmations
+    // read the counter before either wrote it back, this length would be
+    // short of CONCURRENCY.
+    expect(new Set(numbers).size).toBe(CONCURRENCY);
+    expect([...numbers].sort((a, b) => Number(a) - Number(b))).toEqual(
+      Array.from({ length: CONCURRENCY }, (_, index) => BigInt(10_000 + index)),
+    );
+
+    const { data: campaignAfter } = await supabase
+      .from('campaigns')
+      .select('next_number')
+      .eq('id', campaign.id)
+      .single();
+    expect(campaignAfter?.next_number).toBe(10_000 + CONCURRENCY);
+
+    // Not a benchmark — one process, one machine, no network hop — but a
+    // sanity check that the lock is not serialising into a visible stall.
+    console.info(`[load-substitute] ${CONCURRENCY} concurrent confirmations in ${elapsedMs.toFixed(0)}ms`);
+  });
+
   it('lets one of two concurrent first submissions win without failing the other', async () => {
     const campaign = await createOpenCampaign();
     const mailer = new FakeMailer();
@@ -822,6 +877,101 @@ describeWithSupabase('SupabaseRaffleRepository', () => {
     await expect(
       service.confirmVerification({ eventSlug: 'jfca-2026', token: 'z'.repeat(43) }),
     ).resolves.toBeNull();
+  });
+
+  it('finds a real, verified number through "find my number", against real Postgres', async () => {
+    const campaign = await createOpenCampaign();
+    const mailer = new FakeMailer();
+    const service = buildService(mailer);
+    const email = `lookup-${uniqueSuffix()}@example.com`;
+
+    await service.requestVerification({
+      eventSlug: campaign.slug,
+      email,
+      termsConsent: true,
+      turnstileToken: 'captcha',
+    });
+
+    // Not found while only PENDING — proves the adapter reads real state from
+    // Postgres, not a stub.
+    await expect(
+      service.lookupNumber({ eventSlug: campaign.slug, email, turnstileToken: 'captcha' }),
+    ).resolves.toEqual({ found: false });
+
+    const confirmed = await service.confirmVerification({
+      eventSlug: campaign.slug,
+      token: mailer.verification[0].token,
+    });
+
+    // Closing the campaign afterwards proves the lookup is genuinely
+    // schedule-independent end to end, through the real repository — not
+    // only in the in-memory service tests.
+    await supabase.from('campaigns').update({ status: 'CLOSED' }).eq('id', campaign.id);
+
+    await expect(
+      service.lookupNumber({ eventSlug: campaign.slug, email, turnstileToken: 'captcha' }),
+    ).resolves.toEqual({ found: true, number: confirmed?.number });
+  });
+
+  it('enforces the per-address lookup limit against real Postgres, in a bucket the entry form never touches', async () => {
+    const campaign = await createOpenCampaign();
+    const mailer = new FakeMailer();
+    // Not `buildService`: `lookupLimits` is pinned explicitly here rather than
+    // left to fall back to `process.env.RAFFLE_LOOKUP_EMAIL_REQUEST_LIMIT`, so
+    // this test keeps proving what it says regardless of whatever a future
+    // `.env.test.local` or CI secret happens to set that variable to.
+    const service = new RaffleService({
+      repository: new SupabaseRaffleRepository(supabase),
+      mailer,
+      turnstile: { verify: async () => true },
+      rateLimiter: new SupabaseRateLimiter(supabase),
+      verificationTokenSecret: VERIFICATION_SECRET,
+      receiptTokenSecret: RECEIPT_SECRET,
+      lookupLimits: { email: 5, ip: 1000 },
+    });
+    const email = `lookup-limit-${uniqueSuffix()}@example.com`;
+
+    await service.requestVerification({
+      eventSlug: campaign.slug,
+      email,
+      termsConsent: true,
+      turnstileToken: 'captcha',
+    });
+    await service.confirmVerification({ eventSlug: campaign.slug, token: mailer.verification[0].token });
+
+    // Five distinct-IP lookups succeed — proves the address bucket, not the
+    // (pinned, 1000/day) IP bucket, is what caps this at the pinned 5.
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await expect(
+        service.lookupNumber({
+          eventSlug: campaign.slug,
+          email,
+          turnstileToken: 'captcha',
+          ipAddress: `203.0.113.${attempt}`,
+        }),
+      ).resolves.toMatchObject({ found: true });
+    }
+
+    await expect(
+      service.lookupNumber({
+        eventSlug: campaign.slug,
+        email,
+        turnstileToken: 'captcha',
+        ipAddress: '203.0.113.99',
+      }),
+    ).resolves.toEqual({ found: false, reason: 'rate_limited_address' });
+
+    // The entry form's own allowance is untouched: a sixth real submission
+    // from this address is refused for an unrelated reason (already
+    // verified), not for having run out of a shared budget.
+    await expect(
+      service.requestVerification({
+        eventSlug: campaign.slug,
+        email,
+        termsConsent: true,
+        turnstileToken: 'captcha',
+      }),
+    ).resolves.toEqual({ accepted: true });
   });
 });
 

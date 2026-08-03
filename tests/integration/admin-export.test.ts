@@ -15,7 +15,6 @@ function pagesOf(...pages: unknown[][]) {
   };
 }
 const audit = vi.hoisted(() => ({ recordAudit: vi.fn() }));
-const observability = vi.hoisted(() => ({ reportServerError: vi.fn() }));
 
 vi.mock('../../lib/security/operator-session', () => ({
   getOperatorSession: session.getOperatorSession,
@@ -23,7 +22,6 @@ vi.mock('../../lib/security/operator-session', () => ({
 }));
 vi.mock('../../lib/admin/queries', () => queries);
 vi.mock('../../lib/admin/audit', () => audit);
-vi.mock('../../lib/observability/report', () => observability);
 
 import { GET as exportCsv } from '../../app/admin/entries/export/route';
 
@@ -113,42 +111,12 @@ describe('CSV export', () => {
     expect(body.trim().split('\r\n')).toHaveLength(1);
   });
 
-  it('reports a fault when fewer rows are streamed than were counted', async () => {
-    // The count PostgREST returned at the start disagrees with what actually
-    // streamed — the truncation this exists to catch, without a real error
-    // ever being thrown.
-    queries.countEntriesForExport.mockResolvedValue(2);
-    queries.exportEntryPages.mockImplementation(
-      pagesOf([{ number: 10_000, email: 'person@example.com' }]),
-    );
-
-    const response = await exportCsv(exportRequest());
-    await response.text();
-
-    expect(observability.reportServerError).toHaveBeenCalledTimes(1);
-    const [error, context] = observability.reportServerError.mock.calls[0];
-    expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toBe('CSV export wrote 1 rows, expected at least 2');
-    expect(context).toEqual({ route: 'GET /admin/entries/export' });
-  });
-
-  it('does not report a fault when the streamed count matches', async () => {
-    queries.countEntriesForExport.mockResolvedValue(1);
-    queries.exportEntryPages.mockImplementation(
-      pagesOf([{ number: 10_000, email: 'person@example.com' }]),
-    );
-
-    const response = await exportCsv(exportRequest());
-    await response.text();
-
-    expect(observability.reportServerError).not.toHaveBeenCalled();
-  });
-
-  it('does not report a fault when more rows stream than were counted', async () => {
+  it('does not mark the file when more rows stream than were counted', async () => {
     // `rowCount` is a snapshot taken before the stream starts; registration
     // can still be open mid-event, so a later page can legitimately include
     // an entry that did not exist yet when the count was taken. That is
-    // growth, not the truncation this check exists to catch.
+    // growth, not the truncation the marker row and corrective audit entry
+    // exist to catch.
     queries.countEntriesForExport.mockResolvedValue(1);
     queries.exportEntryPages.mockImplementation(
       pagesOf([
@@ -158,9 +126,10 @@ describe('CSV export', () => {
     );
 
     const response = await exportCsv(exportRequest());
-    await response.text();
+    const body = await response.text();
 
-    expect(observability.reportServerError).not.toHaveBeenCalled();
+    expect(body).not.toContain('EXPORT INCOMPLETE');
+    expect(audit.recordAudit).toHaveBeenCalledTimes(1);
   });
 
   it('answers 404 for an event that does not exist, without auditing an export', async () => {
@@ -171,5 +140,101 @@ describe('CSV export', () => {
     expect(response.status).toBe(404);
     expect(queries.exportEntryPages).not.toHaveBeenCalled();
     expect(audit.recordAudit).not.toHaveBeenCalled();
+  });
+
+  // The response is already 200 with the download headers sent by the time
+  // any row is written, so a short or failed export cannot become a
+  // different HTTP status — the only ways left to tell it apart from a
+  // complete one are the file itself and the audit trail.
+  describe('a fewer rows than promised', () => {
+    it('marks the file and records a corrective audit entry, without touching the status', async () => {
+      queries.countEntriesForExport.mockResolvedValue(5);
+      queries.exportEntryPages.mockImplementation(
+        pagesOf([
+          { number: 10_000, email: 'a@example.com' },
+          { number: 10_001, email: 'b@example.com' },
+          { number: 10_002, email: 'c@example.com' },
+        ]),
+      );
+
+      const response = await exportCsv(exportRequest());
+      const body = await response.text();
+      const lines = body.trim().split('\r\n');
+
+      expect(response.status).toBe(200);
+      // Header + 3 real rows + 1 marker row.
+      expect(lines).toHaveLength(5);
+      expect(body).toContain('EXPORT INCOMPLETE');
+      expect(body).toContain('Only 3 of 5 expected rows arrived');
+
+      expect(audit.recordAudit).toHaveBeenCalledTimes(2);
+      const [incomplete] = audit.recordAudit.mock.calls[1];
+      expect(incomplete).toEqual({
+        action: 'EXPORT_CSV_INCOMPLETE',
+        actorId: 'user-1',
+        actorEmail: 'a.tanaka@chairman.jp',
+        campaignId: 'campaign-1',
+        metadata: { event_slug: 'jfca-2026', expected_row_count: 5, written_row_count: 3 },
+      });
+    });
+  });
+
+  describe('a query that fails mid-export', () => {
+    async function readUntilError(response: Response): Promise<{ text: string; errored: boolean }> {
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      let text = '';
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) return { text, errored: false };
+          text += decoder.decode(value, { stream: true });
+        }
+      } catch {
+        return { text, errored: true };
+      }
+    }
+
+    it('gets as far as it can, marks the file, and still errors the response', async () => {
+      queries.countEntriesForExport.mockResolvedValue(5);
+      queries.exportEntryPages.mockImplementation(async function* () {
+        yield [{ number: 10_000, email: 'a@example.com' }];
+        throw new Error('connection reset');
+      });
+
+      const response = await exportCsv(exportRequest());
+      const { text, errored } = await readUntilError(response);
+
+      expect(errored).toBe(true);
+      expect(text).toContain('a@example.com');
+      expect(text).toContain('EXPORT INCOMPLETE');
+      expect(text).toContain('Only 1 of 5 expected rows arrived');
+
+      expect(audit.recordAudit).toHaveBeenCalledTimes(2);
+      const [incomplete] = audit.recordAudit.mock.calls[1];
+      expect(incomplete).toMatchObject({
+        action: 'EXPORT_CSV_INCOMPLETE',
+        metadata: {
+          expected_row_count: 5,
+          written_row_count: 1,
+          error: 'connection reset',
+        },
+      });
+    });
+
+    it('does not let a failed corrective audit write hide the original error', async () => {
+      queries.countEntriesForExport.mockResolvedValue(5);
+      queries.exportEntryPages.mockImplementation(async function* () {
+        throw new Error('connection reset');
+      });
+      // First call is the upfront EXPORT_CSV record; the second, corrective
+      // one is what fails here.
+      audit.recordAudit.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('audit db down'));
+
+      const response = await exportCsv(exportRequest());
+      const { errored } = await readUntilError(response);
+
+      expect(errored).toBe(true);
+    });
   });
 });

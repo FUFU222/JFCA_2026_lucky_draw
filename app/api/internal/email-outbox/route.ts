@@ -1,9 +1,8 @@
-import { timingSafeEqual } from 'node:crypto';
-
 import { NextResponse } from 'next/server';
 
 import { getEmailOutboxProcessor } from '../../../../lib/db/server';
 import { OUTBOX_BATCH_LIMIT } from '../../../../lib/email/outbox';
+import { hasCronSecret } from '../../../../lib/security/cron-auth';
 
 /**
  * Retry worker for messages the inline send could not deliver. A GitHub
@@ -25,7 +24,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 async function run(request: Request): Promise<NextResponse> {
-  if (!isAuthorizedCron(request)) {
+  if (!hasCronSecret(request)) {
     return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
   }
 
@@ -35,19 +34,3 @@ async function run(request: Request): Promise<NextResponse> {
 
 export const GET = run;
 export const POST = run;
-
-function isAuthorizedCron(request: Request): boolean {
-  const expected = process.env.CRON_SECRET;
-  if (!expected) return false;
-
-  // The scheme is required, not stripped opportunistically: the only caller is
-  // the GitHub Actions workflow, and it always sends `Bearer`.
-  const scheme = /^Bearer (.+)$/.exec(request.headers.get('authorization') ?? '');
-  const presented = scheme?.[1];
-  if (!presented) return false;
-
-  // Compared in constant time so the endpoint cannot be probed a byte at a time.
-  const a = Buffer.from(presented);
-  const b = Buffer.from(expected);
-  return a.length === b.length && timingSafeEqual(a, b);
-}

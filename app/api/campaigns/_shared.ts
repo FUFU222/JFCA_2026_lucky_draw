@@ -47,8 +47,10 @@ export function raffleRequestResponse(result: RaffleRequestResult): NextResponse
       return invalidRequest();
     case 'turnstile':
       return NextResponse.json({ ok: false, error: 'captcha_failed' }, { status: 403 });
-    case 'rate_limited':
+    case 'rate_limited_network':
       return NextResponse.json({ ok: false, error: 'try_again_later' }, { status: 429 });
+    case 'rate_limited_address':
+      return NextResponse.json({ ok: false, error: 'try_again_later_address' }, { status: 429 });
     case 'closed':
       return NextResponse.json({ ok: false, error: 'registration_unavailable' }, { status: 403 });
     // Only reachable from a verified operator session, so unlike every other

@@ -95,15 +95,27 @@ in it, and neither do they appear in 確認済み応募数 or 確認待ち.
 
 ## Someone lost their number
 
-**The confirmation email is the copy.** Opening that link again takes them to
-their number rather than saying it has been used, and it keeps working long
-after the 24 hours in which it could still claim one. Only the most recent one:
-if they used **Send it again**, the earlier links belong to spent cycles and
-still read as unusable.
+Point them at **`/{eventSlug}/lookup`** first — "Already entered? Find your
+number" on the entry page links to it. They type the address they entered
+with and, if it has a number, it appears right there: same ticket, same save
+button, no staff involved. It works whether entries are open, paused, or
+closed, which is deliberate — this is needed most right around the draw.
 
-There is no second email. The number page asks them to save the picture or take
-a screenshot, and that plus the link is what a visitor leaves with. If they
-cannot find the email:
+It answers "no ready number for that address yet" both for an address that
+never entered and one that entered but has not confirmed yet — on purpose, so
+the page can never be used to learn who has and has not confirmed. If they
+are sure they entered and this is what they see, they have not opened their
+confirmation link yet; point them at that instead.
+
+**The confirmation email is the other copy.** Opening that link again takes
+them to their number rather than saying it has been used, and it keeps
+working long after the 24 hours in which it could still claim one. Only the
+most recent one: if they used **Send it again**, the earlier links belong to
+spent cycles and still read as unusable.
+
+There is no second email — the lookup page shows the number on screen, it does
+not send it. If neither the lookup page nor the confirmation email works for
+them:
 
 1. Search their address under **応募一覧** and read the number to them.
 2. If they contact you later, they are directed to `info@chairman.jp`. An
@@ -111,6 +123,17 @@ cannot find the email:
 
 There is deliberately no way to send them their number by email and no way to
 reissue a number.
+
+**What the lookup page trades away, on purpose.** It discloses a real,
+issued number to anyone who enters the right address — no proof beyond that.
+Decided 2026-07-31 in place of emailing the number back, to avoid a second
+message per lookup. Two rate limits are the only backstop (five lookups per
+address per day, a separate and more generous ceiling per IP address so the
+venue's shared wifi is not the thing that trips it), and neither stops someone
+who already knows one specific address from seeing that address's number
+once. Accepted because pickup is by screen at the venue regardless, so this
+does not change who can walk up and claim a prize with a number already in
+hand — it only changes how they got the number onto a screen.
 
 ## Starting, pausing, and closing entries
 

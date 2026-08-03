@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { PageShell } from '../../components/public/page-shell';
@@ -36,6 +37,20 @@ export default async function EventPage({
   return (
     <PageShell>
       <h1 className="sr-only">{campaign.title}</h1>
+
+      {/*
+        Always shown, regardless of phase — someone returning to this exact
+        page precisely because entries have closed and they want their number
+        is the most likely visitor to need it, not an edge case to gate on.
+      */}
+      <p className="mb-6 text-sm text-neutral-600">
+        <Link
+          href={`/${eventSlug}/lookup`}
+          className="font-medium text-neutral-900 underline underline-offset-2"
+        >
+          {messages.lookup.entryLink}
+        </Link>
+      </p>
 
       {phase === 'open' || isTestMode ? (
         <RaffleForm

@@ -87,6 +87,25 @@ export const resendRequestSchema = z
 
 export type ResendRequestInput = z.input<typeof resendRequestSchema>;
 
+/**
+ * "Find my number" — deliberately its own schema rather than a reuse of
+ * `resendRequestSchema`, even though the shape is identical today. The two
+ * requests mean different things (send a link vs. disclose a number), and a
+ * shared type would make it easy to wire one into the other's rate-limit
+ * bucket or route by accident.
+ */
+export const lookupRequestSchema = z
+  .object({
+    eventSlug: z.string().min(1).max(100),
+    email: emailField,
+    turnstileToken: z.string().max(4096).optional().default(''),
+    ipAddress: optionalText(64),
+    isTest: z.boolean().optional(),
+  })
+  .strict();
+
+export type LookupRequestInput = z.input<typeof lookupRequestSchema>;
+
 export const confirmRequestSchema = z
   .object({
     eventSlug: z.string().min(1).max(100),

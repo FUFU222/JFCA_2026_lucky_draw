@@ -33,7 +33,6 @@ export const messages = {
     // commercial email has to be its own affirmative act. Unticked is the
     // default a visitor gets by doing nothing.
     marketing: 'Also send me LIVAPON news and offers by email. You can unsubscribe at any time.',
-    marketingOptional: 'Optional — you get your number either way',
     submit: 'Send confirmation email',
     submitting: 'Sending…',
 
@@ -50,6 +49,11 @@ export const messages = {
     errorGeneric: 'Something went wrong. Please try again.',
     errorRateLimited:
       'Too many attempts from this network. Ask a member of staff for help, or try again from mobile data.',
+    // Distinct from the network message above on purpose: switching networks
+    // does nothing for this one, since the limit follows the address, not the
+    // connection.
+    errorRateLimitedAddress:
+      'This address has already requested several confirmation emails today. Wait a while and try again, or ask a member of staff for help.',
     errorClosed: 'Entries are not open at the moment.',
     // Test mode only, so this one is read by an operator rather than a visitor.
     errorTestAddressInUse:
@@ -122,6 +126,30 @@ export const messages = {
     // now: its link returns here for good once a number has been issued.
     lost: 'Lost it? Open the link in your confirmation email again.',
     support: 'Questions:',
+  },
+
+  // A separate small screen, deliberately not folded into the entry form: the
+  // same box and button would have to mean both "enter the draw" and "look up
+  // an existing number", and a mistyped address would silently become a
+  // second entry instead of a lookup. This form asks for nothing but an
+  // address, so there is no consent box to make sense of and no profile
+  // fields to explain.
+  lookup: {
+    entryLink: 'Already entered? Find your number',
+    heading: 'Find your number',
+    body: 'Enter the address you entered with, and your number shows up here if it is ready.',
+    email: 'Email address',
+    submit: 'Find my number',
+    submitting: 'Checking…',
+    // Identical wording for "never entered" and "entered but not confirmed
+    // yet", on purpose — see `RaffleService.lookupNumber`.
+    notFound: 'No ready number for that address yet. Check your confirmation email, or ask a staff member for help.',
+    errorRateLimited: 'Too many attempts from this network. Ask a member of staff for help, or try again from mobile data.',
+    // See the same key under `form` — the address-level limit needs its own
+    // wording because switching networks will not help this one.
+    errorRateLimitedAddress:
+      'This address has already been checked several times today. Try again later, or ask a member of staff for help.',
+    errorGeneric: 'Something went wrong. Please try again.',
   },
 
   schedule: {
