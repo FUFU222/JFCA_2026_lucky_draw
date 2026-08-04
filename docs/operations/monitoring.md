@@ -4,17 +4,19 @@ Until this document existed, the only thing that noticed a fault was a person
 looking at the dashboard. That works at a desk and not at a festival booth,
 which is the one place it has to.
 
-Three layers, each covering what the others cannot:
+Five layers, each covering what the others cannot:
 
 | Layer | Notices | Latency | Needs configuring |
 | --- | --- | --- | --- |
 | Structured error log | every unhandled server error | after the fact | nothing |
 | Alert webhook | the same errors, pushed to a phone | seconds | `ALERT_WEBHOOK_URL` |
+| Client-side error reporting | a fault in a visitor's own browser, before any request is sent | seconds | nothing (always on) |
 | External monitor on `/api/health` | the deployment or the database being unreachable | one polling interval | an account at a monitoring service |
 | Scheduled `Production smoke` workflow | a page or an auth gate that broke | best-effort, hourly at most | nothing (uses `APP_URL`) |
 
-The first is free and automatic. **The other three are what actually has to be
-switched on**, and none of them is on until someone does the steps below.
+The first and third are free and automatic. **The alert webhook and the
+external monitor are what actually have to be switched on**, and neither is
+on until someone does the steps below.
 
 ## 1. The error log
 
@@ -58,14 +60,55 @@ The payload carries both `text` and `content`, which is what makes one URL work
 for all three services without a code change.
 
 **Alerts are throttled**: one per distinct fault per five minutes, at most 20 an
-hour per running instance, and the next one that gets through says how many were
-suppressed. A channel that shows a single line for a hundred failures reads as a
-one-off, which is worse than silence.
+hour per running instance for a server-side fault, and the next one that gets
+through says how many were suppressed. A channel that shows a single line for
+a hundred failures reads as a one-off, which is worse than silence.
+
+**Client-reported faults draw from their own, smaller hourly budget (10, not
+20)** — see the next section — rather than sharing the server-side one. The
+client-error endpoint has to stay unauthenticated, since a visitor's browser
+has no credential to present, so a flood of fabricated reports against it is
+always possible; a shared budget would let that flood spend the whole hourly
+allowance and silently suppress a genuine server-side alert for the rest of
+the window. Separating the two means the worst a hostile or misbehaving
+client can do is drown out other client errors, never a server one.
 
 Faults are grouped after redaction and with digits normalised, so a hundred
 visitors hitting one broken path produce one alert rather than a hundred.
 
-## 3. The external monitor
+## 3. Client-side error reporting
+
+A server-side fault is caught no matter where it happens, by layer 1 above.
+A fault in a visitor's own browser — before any request is even sent to the
+server, such as a script crashing while the entry form renders — used to be
+invisible.
+[components/observability/client-error-reporter.tsx](../../components/observability/client-error-reporter.tsx)
+is mounted once, in the root layout, and subscribes to `window.onerror` and
+`unhandledrejection`. It filters out one specific kind of noise before
+sending anything: a script error whose source is not this application's own
+origin — a browser extension, or a script injected by the LINE/Instagram
+in-app browsers many visitors will actually be using — carries nothing
+actionable, so it is dropped at the source rather than reported.
+
+What survives the filter is POSTed to `/api/client-error`, which is public
+like `/api/health`'s `GET` and rate-limited per IP through the same
+Supabase-backed limiter the raffle form itself uses. From there it goes
+through the identical `reportServerError()` path every server-side fault
+uses — same structured log line, same Slack/Discord/Google Chat webhook,
+same redaction — under the `client:`-prefixed route and the separate budget
+described above. A verification or receipt link carries its bearer token in
+the URL *path itself*, not a query string, so the path a visitor's browser
+reports is redacted the same way an error message is before it can reach a
+chat channel.
+
+This layer has one acknowledged gap: `unhandledrejection` carries no
+filename, so there is no way to apply the same origin filter to it that
+`window.onerror` gets. A rejection from a third-party script running in the
+page (Cloudflare Turnstile's own code, for instance) would be reported like
+a first-party one. The separate, smaller client budget above is what bounds
+the resulting noise rather than a filter removing it.
+
+## 4. The external monitor
 
 This is the only layer that notices the deployment being **gone**, because
 nothing inside a dead deployment can report on it.
@@ -141,7 +184,7 @@ raise the alarm. `OUTBOX_BACKLOG_THRESHOLD` moves the line at which it reads
 The endpoint caches its snapshot for ten seconds, so an unauthenticated URL that
 anyone can poll cannot be turned into database load.
 
-## 4. The scheduled smoke workflow
+## 5. The scheduled smoke workflow
 
 `.github/workflows/production-smoke.yml` drives a real browser against
 production: the entry page renders, the terms resolve, an unusable link says so,
@@ -158,11 +201,6 @@ deploy and before doors open.
 
 ## What this deliberately does not cover
 
-- **Client-side JavaScript errors are not reported.** Capturing them means
-  shipping a browser SDK to every visitor, and this application spends real
-  effort keeping the visitor's page to one mobile screen on festival mobile
-  data. A server-side fault is what takes the journey down; a client-side one
-  still surfaces as a failed API call.
 - **There is no error-grouping dashboard.** `@sentry/nextjs` was the intended
   answer and could not be installed on 2026-07-30: it pulls `webpack@5.109.2`,
   which depends on `enhanced-resolve@^5.24.4`, a version that is not published.
