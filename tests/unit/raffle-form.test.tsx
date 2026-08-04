@@ -550,3 +550,27 @@ describe('resend', () => {
     );
   });
 });
+
+describe('recovering from an expired link', () => {
+  it('always shows the way back to the form, not only once a resend has been tried', async () => {
+    renderForm();
+    await fillAndOpenDialog('expired-check@example.com');
+    confirmInDialog('Send email');
+    await screen.findByRole('heading', { name: 'Check your email' });
+
+    // `resendVerification` never revives an expired token — it silently
+    // no-ops the same way it does for every other outcome it will not
+    // disclose. Nothing on this screen can tell a visitor that a resend
+    // failed for that reason, so the way out has to be offered up front.
+    expect(screen.getByText('Still nothing after a day? The link may have expired.')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Enter your email again' }));
+
+    // Back on the entry form, with the address the visitor already typed
+    // still there — they are not starting over from a blank field.
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'Get your Lucky Draw number' })).toBeInTheDocument(),
+    );
+    expect(screen.getByLabelText(/Email address/)).toHaveValue('expired-check@example.com');
+  });
+});

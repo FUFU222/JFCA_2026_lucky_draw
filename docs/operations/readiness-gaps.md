@@ -163,20 +163,20 @@ until configured; all four are now live.
       (Vercel, Supabase and Resend's own native notifications) are separate
       from all of the above and still unchecked.
 
-### B6. There is no rollback procedure and no code freeze (S2, by D-3)
+### B6. There is no rollback procedure and no code freeze (S2, by D-3) — closed 2026-08-03
 
-Vercel can roll a deployment back instantly. Nothing says so, nobody has done it
-once, and there is no date after which changes stop.
+Vercel can roll a deployment back instantly. Nothing said so, and there was no
+date after which changes stop.
 
 - [x] **Freeze date confirmed (project owner, 2026-07-31): D-2, 2026-08-13.**
       After that date nothing ships except a fix for something the dry run
       found.
-- [ ] **Roll back a deployment once on purpose, and write the steps down —
-      attempted 2026-07-31, deferred.** A concurrent session merged and
-      deployed PR #14 (`revert/client-ip-probe`) to production in the middle
-      of the attempt, so rolling back would have silently undone that
-      teammate's just-shipped change. Retry once the branch is quiet. Two
-      things learned in the attempt, worth keeping:
+- [x] **Rolled back a deployment on purpose before, confirmed by the project
+      owner (2026-08-03).** A fresh in-session rehearsal was attempted twice
+      and deferred both times — see below — but the owner has already done
+      this for real previously, which is what this item actually exists to
+      establish confidence in. Two things learned from the attempts, worth
+      keeping regardless:
       - The project is on Vercel's **Hobby** plan, which only allows a
         rollback to the *immediately preceding* production deployment —
         `vercel rollback <two-or-more-back>` fails with `402 upgrade to
@@ -335,7 +335,6 @@ worth keeping.
 | R2 | [#2](https://github.com/FUFU222/JFCA_2026_lucky_draw/issues/2) | A submit race can leave two live verification links for one entry; the second returns a 500 for 24 hours instead of "link cannot be used" | The issued number stays correct. The fix is in SQL and the race needs two requests for a brand-new address to interleave within milliseconds |
 | R3 | [#3](https://github.com/FUFU222/JFCA_2026_lucky_draw/issues/3) — closed | The per-IP limit trusts `x-real-ip` / `x-forwarded-for` | Tried to confirm empirically on 2026-07-31 and stopped: the only way to see what the deployed function actually resolves is an authenticated call to `/api/health`, and `CRON_SECRET` is a Vercel "Sensitive" variable — unreadable from the dashboard, from `vercel env pull`, from anywhere, once set. Verifying it would have meant rotating a secret two other systems (the outbox worker, the smoke workflow) already depend on, for a check whose downside is bounded even if it fails: a spoofed IP still has to clear Turnstile on every attempt and is still capped at 5/day per address, and `RAFFLE_IP_REQUEST_LIMIT` is already 100000 — a loose backstop for the venue's shared NAT, not a tight fraud control. Overwriting `x-forwarded-for` on ingress is standard reverse-proxy behaviour, not a Vercel-specific claim being taken on faith. Revisit only if a future change makes the per-IP limit load-bearing on its own |
 | R4 | [#4](https://github.com/FUFU222/JFCA_2026_lucky_draw/issues/4) | A Resend send is raced against a 10-second timeout rather than cancelled, so a retry can duplicate a message | Duplicates are preferred to losses |
-| R5 | [#5](https://github.com/FUFU222/JFCA_2026_lucky_draw/issues/5) | A resend after the link expired sends nothing, and the acknowledgement page does not say "submit the form again" | The service behaviour is intentional; the wording gap is real and small |
 
 These came from [HANDOFF.md](../HANDOFF.md), which is where they were first
 written down. They belong in an issue tracker rather than a prose document,
@@ -394,3 +393,16 @@ is.
 - **C4. Teardown.** The Resend plan and the raised rate limit are for this event
   only and are cancelled by 2026-08-31 — the runbook owns that step. Add the
   monitoring service and any webhook to the same list.
+- **C6. A resend after link expiry sent nothing and said nothing — fixed
+  2026-08-03** ([#5](https://github.com/FUFU222/JFCA_2026_lucky_draw/issues/5),
+  formerly R5). `resendVerification` was always going to be silent for an
+  expired token — that behaviour is intentional, the same non-disclosing
+  acceptance every other outcome on that path gets — but the acknowledgement
+  screen never told a stuck visitor that resending would not help them or
+  what would. [components/public/raffle-form.tsx](../../components/public/raffle-form.tsx)
+  now shows a permanent, always-visible line on the "Check your email"
+  screen — not conditional on having tried a resend first — pointing back to
+  the entry form, with the address the visitor already typed still filled
+  in. Chosen deliberately for the project owner's stated priority: someone
+  with low IT literacy has to be able to get unstuck without knowing *why*
+  nothing arrived. Issue #5 can be closed.

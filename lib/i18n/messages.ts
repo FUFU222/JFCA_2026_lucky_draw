@@ -85,6 +85,13 @@ export const messages = {
     resendDone: 'If this address can enter, another link is on its way.',
     // Followed by a live M:SS countdown; see formatCooldown in raffle-form.tsx.
     resendWait: 'You can request another in',
+    // A link older than 24 hours cannot be revived, and "Send it again"
+    // silently does nothing for it — the same non-disclosing acceptance as
+    // every other outcome here. This is the only way a visitor finds out
+    // resending will not help them, so it is always shown, not only after a
+    // resend that appeared to work but did not.
+    expiredHint: 'Still nothing after a day? The link may have expired.',
+    expiredAction: 'Enter your email again',
   },
 
   // This page has no confirmation dialog, so the one line under the heading is
