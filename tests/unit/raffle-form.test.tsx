@@ -573,4 +573,33 @@ describe('recovering from an expired link', () => {
     );
     expect(screen.getByLabelText(/Email address/)).toHaveValue('expired-check@example.com');
   });
+
+  it('still honours the resend cooldown for the same address after using it', async () => {
+    // The button exists precisely so a visitor does not have to understand
+    // *why* resending is not working — but it must not become a backdoor
+    // around the cooldown the resend button next to it enforces for the
+    // exact same reason: `resendVerification` charges the same daily
+    // allowance regardless of which button triggered it.
+    vi.useFakeTimers({ shouldAdvanceTime: true, now: Date.now() });
+    try {
+      renderForm();
+      await fillAndOpenDialog('cooldown-then-again@example.com');
+      confirmInDialog('Send email');
+      await screen.findByRole('heading', { name: 'Check your email' });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Enter your email again' }));
+      await waitFor(() =>
+        expect(
+          screen.getByRole('heading', { name: 'Get your Lucky Draw number' }),
+        ).toBeInTheDocument(),
+      );
+
+      fireEvent.click(agreementCheckbox());
+      expect(
+        screen.getByRole('button', { name: /You can request another in/ }),
+      ).toBeDisabled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

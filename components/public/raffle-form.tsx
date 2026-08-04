@@ -347,7 +347,14 @@ export function RaffleForm({
           {submitted.expiredHint}{' '}
           <button
             type="button"
-            className="font-semibold text-neutral-900 underline underline-offset-2"
+            // Disabled while a resend is in flight for the same reason the
+            // resend button itself is: abandoning that request mid-flight
+            // rather than waiting for it left `status` stuck at `'submitted'`
+            // out of sync with `screen === 'form'`, which silently disables
+            // the draft-autosave effect (guarded on `status === 'submitted'`)
+            // for the rest of the session.
+            disabled={status === 'sending'}
+            className="font-semibold text-neutral-900 underline underline-offset-2 disabled:opacity-40"
             onClick={() => {
               // The address itself stays filled in — only the screen and the
               // stale state around the old attempt reset. Re-submitting is
@@ -356,6 +363,11 @@ export function RaffleForm({
               setStatus('editing');
               setError(null);
               setResendNote(null);
+              // A token solved for the resend dialog and then cancelled is
+              // still sitting in state otherwise, and could satisfy `canSend`
+              // on the freshly-shown form before its own widget answers.
+              setCaptchaToken(null);
+              setCaptchaFailed(false);
               setScreen('form');
             }}
           >
