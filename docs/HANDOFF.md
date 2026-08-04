@@ -1,17 +1,41 @@
 # Handoff — JFCA 2026 Lucky Draw
 
-Updated 2026-07-29. Written for whoever picks this up next, agent or human.
+Updated 2026-08-04 (originally written 2026-07-29). Written for whoever picks
+this up next, agent or human.
 
 The application is built, deployed and operational at
 `https://luckydraw.livapon.com`. What remains before the event is content and
 configuration, not code — see [Open items](#open-items).
 
+**[readiness-gaps.md](operations/readiness-gaps.md) is the living tracker of
+what is still open, not this section.** It is dated and updated far more
+often than this file is, and every unresolved item here already has an issue
+number and a row in that document's Accepted Risks or Missing Mechanisms
+tables. Read this file for how the system is built and why; read
+readiness-gaps.md for what still needs doing.
+
+Since this was last written: monitoring went from implemented-but-off to
+fully wired (structured log, Slack alert webhook, three external monitors,
+an hourly smoke workflow); a rollback was exercised for real; the freeze date
+was set; the on-site outage plan, the data-retention/deletion policy and the
+personal-data map were all written and decided; and a browser-side error
+reporting layer was added — see
+[monitoring.md](operations/monitoring.md#3-client-side-error-reporting) —
+so a fault in a visitor's own browser, before any request even reaches the
+server, is no longer invisible the way it was when this file was written.
+
 ## Repository
 
 - Root: `/Users/fufu/code/JFCA2026_lucky_draw`
-- Implementation worktree: `.worktrees/lucky-draw`, branch `codex/lucky-draw`
-- `main` is what deploys. The worktree branch is fast-forwarded into it, pushed,
-  then released with `vercel --prod --yes` from the repository root.
+- Work happens in a git worktree under `.claude/worktrees/`, on a branch
+  created for that session — never directly on `main`. See
+  [runbook.md](operations/runbook.md#shipping-a-change) for the full
+  pipeline: local checks, PR, code review, CI, merge, then
+  `vercel --prod --yes` from a working tree whose content matches `main`.
+  Delete the worktree and its branch once the work has shipped; a stray one
+  left behind is what causes a later session to guess wrong about which is
+  current.
+- `main` is what deploys.
 
 ## What it does
 
@@ -46,6 +70,9 @@ and never says who won.
 | `app/admin/` | Dashboard, entry search, CSV export, campaign controls, design preview |
 | `app/api/campaigns/` | The four public writes (entry, resend, confirm, lookup) |
 | `app/api/internal/email-outbox/` | Retry worker endpoint, called by GitHub Actions |
+| `app/api/client-error/` | Public, rate-limited endpoint a visitor's browser reports its own JS errors to |
+| `components/observability/` | The root-mounted listener that feeds the endpoint above |
+| `lib/observability/` | Alert formatting, redaction, throttling and the `reportServerError()` every fault (server or client) goes through |
 | `lib/raffle/service.ts` | The state machine. Every decision about who gets a number is here |
 | `lib/db/server.ts` | The Supabase adapter, `server-only`, service-role |
 | `lib/admin/` | Dashboard queries, audit log, CSV |
@@ -178,9 +205,11 @@ with their audit rows; search, CSV export and the preview page.
 Five defects were found and fixed in `cf1c1d6` — that commit message describes
 each one and why it mattered.
 
-`pnpm test` is 260 cases across 27 files. `pnpm test:e2e` is 22 Playwright
-specs: 6 public journey, 7 admin, and 9 read-only production smoke that only run
-when `SMOKE_BASE_URL` is set — so a local run reports 13.
+`pnpm test` is 289 cases across 30 files as of 2026-08-04 (up from 260/27 on
+2026-07-29 — expect this number to keep moving; run it rather than trust it).
+`pnpm test:e2e` is 22 Playwright specs: 6 public journey, 7 admin, and 9
+read-only production smoke that only run when `SMOKE_BASE_URL` is set — so a
+local run reports 13.
 
 ## Open items
 
@@ -200,41 +229,21 @@ when `SMOKE_BASE_URL` is set — so a local run reports 13.
    and is not what gets stored; the campaign row is. Nothing keeps them
    agreeing, so the admin dashboard compares the two and flags a drift rather
    than letting it be discovered from a consent record nobody can reproduce.
-2. **A resend after the link expired sends nothing** and the acknowledgement
-   page does not say "submit the form again". The service behaviour is
-   intentional; the wording gap is real. The *verify* page was fixed; only the
-   resend acknowledgement is still silent.
-3. **The per-IP limit trusts `x-real-ip` / `x-forwarded-for`.** Confirm Vercel
-   overwrites both on ingress; if it does not, the limit is bypassable.
-4. **The Resend send is raced against a 10-second timeout, not cancelled.** A
-   request that wins after the timeout may already have delivered, so a retry
-   can duplicate a message. Duplicates are preferred to losses.
-5. **E2E does not run in CI.** `.github/workflows/ci.yml` runs `pnpm test` only,
-   because the browser suite needs a Supabase stack and a Turnstile test key.
-6. **Staging cannot be a Vercel deployment** as previously documented — every
-   Vercel build is `NODE_ENV=production`, which the startup guard and the
-   Turnstile check both key on. See `docs/operations/staging.md`; test mode now
-   covers most of what staging was for.
-7. **A submit race can leave two live verification links for one entry.** Narrow
-   window, and the issued number stays correct, but the second link then returns
-   a 500 for its full 24-hour lifetime instead of "link cannot be used". Not
-   fixed: the fix is in SQL, and the race needs two requests for a brand-new
-   address to interleave within milliseconds.
-8. **Anything on an unverified entry can be overwritten** by anyone
-   resubmitting that address — the profile fields, and since `0008` the
-   marketing consent with them. A third party who submits a stranger's address
-   with the optional box ticked leaves `marketing_consent = true` stamped with
-   their own submission time; the victim then confirms their own link and is
-   exported as a consented subscriber. Bounded by the 5/day per-address limit
-   and it cannot yield a number, but the consent timestamp is the one field
-   here that is meant to be evidence.
+Everything else that was tracked here as of 2026-07-29 has since moved to
+[readiness-gaps.md](operations/readiness-gaps.md), each with its own GitHub
+issue (`gh issue list --state all`) carrying the reasoning for why it is
+still open or was accepted rather than fixed. As of 2026-08-04: the resend
+after link expiry (was item 2 here) is fixed and closed
+([#5](https://github.com/FUFU222/JFCA_2026_lucky_draw/issues/5)); the per-IP
+header trust (was item 3) was reviewed and closed
+([#3](https://github.com/FUFU222/JFCA_2026_lucky_draw/issues/3)); the
+Resend-timeout race, the submit race, the consent-overwrite race, and E2E not
+running in CI (were items 4, 7, 8, and 5) are all still open — see
+readiness-gaps.md's Accepted Risks table and its P5 entry for the current
+reasoning on each, rather than trusting the summary that used to be here.
+Staging not being a Vercel deployment (was item 6) is not a gap at all, just
+a fact of how the platform works — see [staging.md](operations/staging.md).
 
-   Not fixed, and the reason is that there is nothing to fix it with: before
-   verification nobody owns the row, both submissions carry the same live
-   token, and the person confirming cannot be told apart from the person who
-   typed the box. A real fix issues a fresh token whenever consent changes, so
-   the answer that gets confirmed is the one from the link that was clicked.
-   Worth doing before this code is reused for anything that mails a list.
 Resolved since: the visitor's form used to lead with seven expanded optional
 fields, putting the only required one 935px down an 812px viewport. The section
 is now a collapsed disclosure — still first, so the offer is made before the
@@ -265,9 +274,8 @@ Node 22 and pnpm 11.9 are pinned (`.nvmrc`, `package.json`); newer Node works
 but prints engine warnings. Docker is required for the database suites.
 
 ```bash
-cd /Users/fufu/code/JFCA2026_lucky_draw/.worktrees/lucky-draw
 open -a Docker && pnpm exec supabase start && pnpm exec supabase db reset
-pnpm test && pnpm typecheck && pnpm lint
+pnpm test && pnpm typecheck && pnpm lint && pnpm build
 ```
 
 `.env.local` and `.env.test.local` are gitignored; the local Supabase values
@@ -279,14 +287,29 @@ come from `pnpm exec supabase status -o json`. Local mail lands in Mailpit at
 - Logo in use: `assets/LIVAPON_logo_horizontal_cropped.png`
   (original: `assets/LIVAPON_logo_horizontal_350x.png`).
 - Privacy policy: `https://livapon.com/policies/privacy-policy`.
-- Lucky Draw Terms live in `lib/campaign/legal.ts` and still need final wording.
+- Lucky Draw Terms live in `lib/campaign/legal.ts`; wording and version were
+  finalized 2026-07-29 at `jfca-2026-terms-v1` and must not be edited in
+  place now that real entries exist — see [Open items](#open-items) above.
 
 ## The operational documents
 
+- [readiness-gaps.md](operations/readiness-gaps.md) — the living tracker of
+  what is still open or was deliberately accepted, with a deadline and an
+  owner against each item. Start here.
+- [runbook.md](operations/runbook.md) — the engineering side: shipping a
+  change, rolling one back, rotating a secret, and what to do when an alert
+  fires. For the maintainer, not the booth operator.
 - [prelaunch-checklist.md](operations/prelaunch-checklist.md) — everything that
   must be true before the QR code is printed.
 - [on-site-runbook.md](operations/on-site-runbook.md) — what the operator does
   at the venue. Names every control exactly as it appears on screen.
+- [monitoring.md](operations/monitoring.md) — the error log, the alert
+  webhook, client-side error reporting, and the external monitor.
+- [backup-restore.md](operations/backup-restore.md) — the Supabase plan's
+  backup capability (none, on Free), the manual dump procedure, and the
+  restore that was actually run to prove it works.
+- [data-privacy.md](operations/data-privacy.md) — retention, the deletion
+  procedure, the personal-data map, and who holds which credential.
 - [staging.md](operations/staging.md) — the load test, and why staging is not a
   Vercel deployment.
 - [qa-verification-checklist.md](operations/qa-verification-checklist.md) —

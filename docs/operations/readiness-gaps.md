@@ -62,10 +62,15 @@ The figures above describe the two-email world and are left as written, because
 the plan and the ceiling they measure against have not changed. Against 30,000
 messages the allowance is now comfortable rather than exceeded.
 
-- [ ] Ask Resend support for 50/s. **Send the request on the earliest possible
-      day**; it is the one item here with a third party's response time in it.
-- [ ] Confirm a valid card is on file. A declined card turns the soft quota into
-      a hard stop, which is the only way volume can end the event.
+- [x] Ask Resend support for a higher rate. Requested 2026-07-30 via
+      Settings → Usage → **Talk to an expert**; granted the same day at
+      **25 req/s** (half of the 50 asked for, and accepted — see
+      [prelaunch-checklist.md](prelaunch-checklist.md) §2 for the headroom
+      math that makes 25 enough).
+- [x] Confirm a valid card is on file. Confirmed 2026-07-30, on Pro — see
+      [prelaunch-checklist.md](prelaunch-checklist.md) §2. A declined card
+      turns the soft quota into a hard stop, which is the only way volume can
+      end the event.
 - [ ] **Confirm transactional pay-as-you-go is switched on.** With the receipt
       email, 60,000 messages against a 50,000 allowance means the last ~10,000
       are overage — about $9 at $0.90 per 1,000. Off, sending stops dead at
@@ -123,16 +128,22 @@ Full write-up, commands, and the restore proof in
       unattended agent with production access is a worse risk than the one
       it would solve).
 
-### B4. The load test has never been run (S2, by D-5)
+### B4. The load test has never been run (S2, by D-5) — closed 2026-07-30
 
 The 100 requests/second target in [staging.md](staging.md) is unmeasured, and the
 environment it needs does not exist: every Vercel build is `NODE_ENV=production`,
 which the startup guard and the Turnstile check both key on, so the load test
 needs the built app running somewhere else against a separate Supabase project.
 
-- [ ] Stand that up and run it, or **record the decision not to** and say what is
-      being accepted instead. Either is defensible; leaving the target in a
-      document while never measuring it is not.
+- [x] **Decision (2026-07-30): not run, deliberately** — see
+      [staging.md](staging.md#load-test--not-run-for-this-event-and-why-that-is-a-reasoned-call)
+      for the full reasoning. In short: the property it would prove (no
+      duplicate numbers) is a structural guarantee from a row lock, already
+      exercised directly at 80-way concurrency in
+      `tests/integration/raffle-repository.test.ts` at zero cost; this
+      event's real traffic ceiling is single digits per second, nowhere near
+      the 100 req/s target; and standing up a second cloud Supabase project
+      hit the organization's Free-tier 2-project cap.
 
 ### B5. Monitoring is implemented but switched off (S2, by D-3) — closed 2026-07-31
 
@@ -345,8 +356,8 @@ is.
 ## Cleanups
 
 - **C1. The CSV export can truncate silently
-  ([#6](https://github.com/FUFU222/JFCA_2026_lucky_draw/issues/6), fixed —
-  pending merge).** A trailing marker row plus a corrective
+  ([#6](https://github.com/FUFU222/JFCA_2026_lucky_draw/issues/6), fixed and
+  merged).** A trailing marker row plus a corrective
   `EXPORT_CSV_INCOMPLETE` audit entry, since the response is already 200 with
   the download headers sent before the first row streams. Neither the HTTP
   status nor the filename can change after the fact; the file itself and the
@@ -380,8 +391,8 @@ is.
   `tests/unit/raffle-form.test.tsx` cover the countdown, its re-arming on an
   actual resend, and surviving a reload.
 - **C2. `hasCronSecret` exists twice
-  ([#7](https://github.com/FUFU222/JFCA_2026_lucky_draw/issues/7), fixed —
-  pending merge).** The outbox route's own copy now imports
+  ([#7](https://github.com/FUFU222/JFCA_2026_lucky_draw/issues/7), fixed and
+  merged).** The outbox route's own copy now imports
   [lib/security/cron-auth.ts](../../lib/security/cron-auth.ts) instead.
 - **C3. No error-grouping dashboard
   ([#8](https://github.com/FUFU222/JFCA_2026_lucky_draw/issues/8)).**

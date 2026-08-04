@@ -241,11 +241,15 @@ These documents own the deployment:
   what the operator does at the venue, including the one thing most likely to
   surprise them: a shared venue network makes many visitors look like one IP.
 - [docs/operations/monitoring.md](docs/operations/monitoring.md) — the error log,
-  the alert webhook, and the external monitor on `/api/health`. Three of its four
-  layers are off until somebody switches them on.
+  the alert webhook, client-side error reporting, and the external monitor on
+  `/api/health`. Two of its five layers needed switching on deliberately;
+  both are confirmed live against production.
 - [docs/operations/readiness-gaps.md](docs/operations/readiness-gaps.md) — what
   is still unverified or missing before this can be called ready, with a deadline
   against each item.
+- [docs/operations/runbook.md](docs/operations/runbook.md) — the engineering
+  side for the maintainer: shipping a change, rolling one back, rotating a
+  secret, and what to do when an alert fires.
 
 The schedule is data, not code. Opening and draw times are set on the campaign
 row; registration closes automatically 30 minutes before the draw starts. No
