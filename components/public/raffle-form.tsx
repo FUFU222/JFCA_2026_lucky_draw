@@ -335,6 +335,45 @@ export function RaffleForm({
           {submitted.spam}
         </p>
         {resendNote && <p className="text-sm text-neutral-700">{resendNote}</p>}
+        {/*
+          Always shown, not only after a resend that looked like it worked.
+          A link past 24 hours cannot be revived, and "Send it again" is
+          silently a no-op for it — the same non-disclosing "another link is
+          on its way" acceptance as everything else here. This is the only
+          place that tells a visitor stuck on this screen that resending will
+          not help them, and that entering again will.
+        */}
+        <p className="text-sm text-neutral-600">
+          {submitted.expiredHint}{' '}
+          <button
+            type="button"
+            // Disabled while a resend is in flight for the same reason the
+            // resend button itself is: abandoning that request mid-flight
+            // rather than waiting for it left `status` stuck at `'submitted'`
+            // out of sync with `screen === 'form'`, which silently disables
+            // the draft-autosave effect (guarded on `status === 'submitted'`)
+            // for the rest of the session.
+            disabled={status === 'sending'}
+            className="font-semibold text-neutral-900 underline underline-offset-2 disabled:opacity-40"
+            onClick={() => {
+              // The address itself stays filled in — only the screen and the
+              // stale state around the old attempt reset. Re-submitting is
+              // what actually issues a fresh token; `resendVerification`
+              // never does, expired or not.
+              setStatus('editing');
+              setError(null);
+              setResendNote(null);
+              // A token solved for the resend dialog and then cancelled is
+              // still sitting in state otherwise, and could satisfy `canSend`
+              // on the freshly-shown form before its own widget answers.
+              setCaptchaToken(null);
+              setCaptchaFailed(false);
+              setScreen('form');
+            }}
+          >
+            {submitted.expiredAction}
+          </button>
+        </p>
         {error && (
           <p role="alert" className="text-sm font-medium text-[#c8102e]">
             {error}

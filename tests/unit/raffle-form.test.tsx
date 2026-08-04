@@ -550,3 +550,56 @@ describe('resend', () => {
     );
   });
 });
+
+describe('recovering from an expired link', () => {
+  it('always shows the way back to the form, not only once a resend has been tried', async () => {
+    renderForm();
+    await fillAndOpenDialog('expired-check@example.com');
+    confirmInDialog('Send email');
+    await screen.findByRole('heading', { name: 'Check your email' });
+
+    // `resendVerification` never revives an expired token — it silently
+    // no-ops the same way it does for every other outcome it will not
+    // disclose. Nothing on this screen can tell a visitor that a resend
+    // failed for that reason, so the way out has to be offered up front.
+    expect(screen.getByText('Still nothing after a day? The link may have expired.')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Enter your email again' }));
+
+    // Back on the entry form, with the address the visitor already typed
+    // still there — they are not starting over from a blank field.
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'Get your Lucky Draw number' })).toBeInTheDocument(),
+    );
+    expect(screen.getByLabelText(/Email address/)).toHaveValue('expired-check@example.com');
+  });
+
+  it('still honours the resend cooldown for the same address after using it', async () => {
+    // The button exists precisely so a visitor does not have to understand
+    // *why* resending is not working — but it must not become a backdoor
+    // around the cooldown the resend button next to it enforces for the
+    // exact same reason: `resendVerification` charges the same daily
+    // allowance regardless of which button triggered it.
+    vi.useFakeTimers({ shouldAdvanceTime: true, now: Date.now() });
+    try {
+      renderForm();
+      await fillAndOpenDialog('cooldown-then-again@example.com');
+      confirmInDialog('Send email');
+      await screen.findByRole('heading', { name: 'Check your email' });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Enter your email again' }));
+      await waitFor(() =>
+        expect(
+          screen.getByRole('heading', { name: 'Get your Lucky Draw number' }),
+        ).toBeInTheDocument(),
+      );
+
+      fireEvent.click(agreementCheckbox());
+      expect(
+        screen.getByRole('button', { name: /You can request another in/ }),
+      ).toBeDisabled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
