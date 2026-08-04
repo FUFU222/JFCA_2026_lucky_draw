@@ -17,9 +17,15 @@ function fetchCalls() {
   return (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls;
 }
 
+function flushMicrotasks(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+let unmount: () => void;
+
 beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })));
-  render(<ClientErrorReporter />);
+  ({ unmount } = render(<ClientErrorReporter />));
 });
 
 afterEach(() => {
@@ -63,5 +69,32 @@ describe('client error reporter', () => {
     expect(fetchCalls()).toHaveLength(1);
     const body = JSON.parse(fetchCalls()[0][1].body as string);
     expect(body.message).toBe('a plain string reason');
+  });
+
+  it('stops listening once unmounted', () => {
+    // A real dispatch after unmount would hit jsdom's own unhandled-error
+    // reporting once no listener is left to observe it — not something this
+    // test wants to exercise. A spy on the removal itself is the direct way
+    // to check the cleanup ran.
+    const removeSpy = vi.spyOn(window, 'removeEventListener');
+
+    unmount();
+
+    expect(removeSpy).toHaveBeenCalledWith('error', expect.any(Function));
+    expect(removeSpy).toHaveBeenCalledWith('unhandledrejection', expect.any(Function));
+  });
+
+  it('does not loop when the report itself fails to send', async () => {
+    // A rejected fetch — offline, DNS failure — is itself a rejected promise.
+    // If it were left uncaught, this component's own unhandledrejection
+    // listener would pick it up and report again, looping for as long as the
+    // network stays down. Regression test for that.
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('network down'); }));
+
+    dispatchError(`${window.location.origin}/x.js`, 'boom while offline');
+    await flushMicrotasks();
+    await flushMicrotasks();
+
+    expect(fetchCalls()).toHaveLength(1);
   });
 });

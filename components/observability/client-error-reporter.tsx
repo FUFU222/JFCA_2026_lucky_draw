@@ -20,12 +20,17 @@ function isOwnScript(filename: string | undefined): boolean {
 
 function report(message: string, stack: string | undefined): void {
   try {
-    void fetch('/api/client-error', {
+    // A rejected fetch (offline, DNS failure — plausible on event WiFi) is a
+    // rejected promise, which this same component's own unhandledrejection
+    // listener would otherwise pick up and try to report again, looping for
+    // as long as the network is down. The `.catch` here, not the `try` above,
+    // is what actually stops that: `try` only guards a synchronous throw.
+    fetch('/api/client-error', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ message, stack, path: window.location.pathname }),
       keepalive: true,
-    });
+    }).catch(() => {});
   } catch {
     // Best-effort by definition; a visitor's flow must never wait on this.
   }
@@ -44,6 +49,12 @@ export function ClientErrorReporter(): null {
       report(event.message, event.error instanceof Error ? event.error.stack : undefined);
     }
 
+    // Unlike onError, this has no filename to check the origin of — a
+    // rejection from Cloudflare Turnstile's own script would be reported the
+    // same as one from our own code. Left unfiltered on purpose: the
+    // dedicated client-error alert budget (see `clientThrottle` in
+    // lib/observability/report.ts) already bounds how much noise any one
+    // source, third-party or not, can generate.
     function onRejection(event: PromiseRejectionEvent): void {
       const reason: unknown = event.reason;
       const message = reason instanceof Error ? reason.message : String(reason);

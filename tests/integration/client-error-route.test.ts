@@ -52,13 +52,16 @@ describe('client error report endpoint', () => {
     expect(context).toEqual({ route: 'client:/summer-festival', kind: 'client' });
   });
 
-  it('redacts a bearer token embedded in the reported path', async () => {
+  it.each([
+    ['a verification link', 'verify'],
+    ['a receipt link', 'number'],
+  ])('redacts the bearer token embedded in %s path', async (_label, segment) => {
     const token = 'a'.repeat(43);
 
-    await POST(request({ message: 'boom', path: `/summer-festival/verify/${token}` }));
+    await POST(request({ message: 'boom', path: `/summer-festival/${segment}/${token}` }));
 
     const [, context] = reportServerError.mock.calls[0];
-    expect(context.route).toBe('client:/summer-festival/verify/[token]');
+    expect(context.route).toBe(`client:/summer-festival/${segment}/[token]`);
   });
 
   it('refuses a request once the per-IP allowance for this window is spent', async () => {
@@ -75,5 +78,25 @@ describe('client error report endpoint', () => {
 
     expect(response.status).toBe(400);
     expect(reportServerError).not.toHaveBeenCalled();
+  });
+
+  it('rejects a non-JSON body the same way as a missing message', async () => {
+    const response = await POST(
+      new Request('https://example.test/api/client-error', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-real-ip': '203.0.113.5' },
+        body: 'not json',
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(reportServerError).not.toHaveBeenCalled();
+  });
+
+  it('falls back to an unknown path when none is reported', async () => {
+    await POST(request({ message: 'boom' }));
+
+    const [, context] = reportServerError.mock.calls[0];
+    expect(context.route).toBe('client:unknown');
   });
 });
