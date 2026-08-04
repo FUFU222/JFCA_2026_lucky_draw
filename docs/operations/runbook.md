@@ -189,6 +189,15 @@ the run-up to the event and on the day itself.
   [monitoring.md](monitoring.md) §4 — in particular, that the event-day
   `"accepting":true` monitor is paused outside the hours intake is actually
   open, or it alarms all night for a normal closed state.
+- **GitHub → Security → Dependabot alerts.** Enabled 2026-08-04, alongside
+  Dependabot security updates (auto-opens a PR when an alert fires — still
+  goes through the normal [shipping pipeline](#shipping-a-change) above, it
+  is not auto-merged). `pnpm audit` in CI only catches a new advisory when
+  someone next pushes code; this is what covers the gap between pushes,
+  which matters once nobody is pushing regularly. Deliberately not paired
+  with `.github/dependabot.yml` (routine, non-security version-update PRs)
+  before the 2026-08-13 freeze — noisy version bumps landing right before a
+  one-shot event help nobody. Worth adding after the event.
 - **Open GitHub issues** (`gh issue list`) against
   [readiness-gaps.md](readiness-gaps.md)'s Accepted Risks table — the two
   should always agree on what is still open versus decided-and-accepted.
