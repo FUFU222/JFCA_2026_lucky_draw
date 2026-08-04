@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Inter, Space_Grotesk } from 'next/font/google';
 
 import './globals.css';
+import { ClientErrorReporter } from '../components/observability/client-error-reporter';
 
 export const metadata: Metadata = {
   title: 'JFCA 2026 Lucky Draw',
@@ -27,7 +28,10 @@ const body = Inter({
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={`${heading.variable} ${body.variable}`}>
-      <body>{children}</body>
+      <body>
+        <ClientErrorReporter />
+        {children}
+      </body>
     </html>
   );
 }
