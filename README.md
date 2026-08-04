@@ -242,7 +242,8 @@ These documents own the deployment:
   surprise them: a shared venue network makes many visitors look like one IP.
 - [docs/operations/monitoring.md](docs/operations/monitoring.md) — the error log,
   the alert webhook, client-side error reporting, and the external monitor on
-  `/api/health`. Two of its five layers are off until somebody switches them on.
+  `/api/health`. Two of its five layers needed switching on deliberately;
+  both are confirmed live against production.
 - [docs/operations/readiness-gaps.md](docs/operations/readiness-gaps.md) — what
   is still unverified or missing before this can be called ready, with a deadline
   against each item.

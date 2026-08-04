@@ -14,9 +14,14 @@ Five layers, each covering what the others cannot:
 | External monitor on `/api/health` | the deployment or the database being unreachable | one polling interval | an account at a monitoring service |
 | Scheduled `Production smoke` workflow | a page or an auth gate that broke | best-effort, hourly at most | nothing (uses `APP_URL`) |
 
-The first and third are free and automatic. **The alert webhook and the
-external monitor are what actually have to be switched on**, and neither is
-on until someone does the steps below.
+The structured log, client-side reporting and the scheduled smoke workflow
+need nothing to configure. **The alert webhook and the external monitor are
+the two that had to be switched on deliberately** — both were, confirmed
+live against production on 2026-08-03 (see
+[readiness-gaps.md](readiness-gaps.md) B5). The steps below are what was
+done and are kept as the reference for redoing it — after a Vercel
+environment reset, a project migration, or reusing this code for a future
+event — not as an outstanding task.
 
 ## 1. The error log
 
@@ -132,17 +137,20 @@ it. The public body carries no counts and no personal data:
 
 ### Setting it up
 
-Any service that polls an HTTP endpoint, matches a keyword, and can push to a
-phone will do. **UptimeRobot's free tier** is the recommendation: it does keyword
-monitoring and needs no card. Verify the polling interval it gives you on
-signup — five minutes or better is the requirement here.
+**Done — all three created on UptimeRobot's free tier, confirmed against
+production 2026-08-03.** Kept below as the reference for redoing this, not
+as an open task. Any service that polls an HTTP endpoint, matches a keyword,
+and can push to a phone will do; UptimeRobot needs no card and does keyword
+monitoring. Verify the polling interval it gives you on signup — five
+minutes or better is the requirement here.
 
-- [ ] **Monitor 1, always on.** `GET https://luckydraw.livapon.com/api/health`,
+- [x] **Monitor 1, always on.** `GET https://luckydraw.livapon.com/api/health`,
       alert on a non-2xx response. This is the outage alarm.
-- [ ] **Monitor 2, always on.** Same URL, keyword monitor, alert when the body
+- [x] **Monitor 2, always on.** Same URL, keyword monitor, alert when the body
       stops containing `"status":"ok"`. This is what surfaces a `degraded`
       deployment — mail queued and not moving — which monitor 1 cannot see.
-- [ ] **Monitor 3, event day only.** Same URL, keyword monitor on
+- [x] **Monitor 3, event day only — created, correctly left paused.** Same
+      URL, keyword monitor on
       `"accepting":true`. Switch it on when intake opens and off when it closes.
       It is the answer to the worst silent failure available to this system: a
       stray tap that pauses or closes intake, with the booth carrying on

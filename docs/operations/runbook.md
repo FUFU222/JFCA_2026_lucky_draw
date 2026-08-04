@@ -186,7 +186,7 @@ the run-up to the event and on the day itself.
   answers correctly on the paths a real visitor uses, without creating
   anything.
 - **The three UptimeRobot monitors**, described in
-  [monitoring.md](monitoring.md) §3 — in particular, that the event-day
+  [monitoring.md](monitoring.md) §4 — in particular, that the event-day
   `"accepting":true` monitor is paused outside the hours intake is actually
   open, or it alarms all night for a normal closed state.
 - **Open GitHub issues** (`gh issue list`) against
