@@ -10,9 +10,13 @@ import {
 } from '../../../../lib/db/public-queries';
 import { requiredSecret } from '../../../../lib/db/server';
 import { messages } from '../../../../lib/i18n/messages';
+import { bearerTokenRobotsMetadata } from '../../../../lib/security/bearer-token-page';
 
 // This page must never be cached: it reports whether a link is still usable.
 export const dynamic = 'force-dynamic';
+
+// Same reasoning as the number page: this URL is the verification token itself.
+export const metadata = bearerTokenRobotsMetadata;
 
 export default async function VerifyPage({
   params,
