@@ -1,11 +1,45 @@
 # Handoff — JFCA 2026 Lucky Draw
 
-Updated 2026-08-04 (originally written 2026-07-29). Written for whoever picks
+Updated 2026-08-20 (originally written 2026-07-29). Written for whoever picks
 this up next, agent or human.
 
-The application is built, deployed and operational at
-`https://luckydraw.livapon.com`. What remains before the event is content and
-configuration, not code — see [Open items](#open-items).
+## Closed — 2026-08-20
+
+The event (2026-08-15) is over. The project owner decided to close the
+system rather than leave it running unattended until the originally planned
+[2026-11-13 deletion date](operations/data-privacy.md). Everything below this
+notice describes the system as it was *while operating* — read it for how the
+thing is built, not as a description of its current state.
+
+What was done, in order, the same day:
+
+1. Final CSV export taken (outbox confirmed at zero first).
+2. Resend's paid plan cancelled — it was bought for this event only.
+3. A pending security fix ([robots.ts](../app/robots.ts), noindex on the two
+   bearer-token pages, baseline response headers) was finished, reviewed, and
+   shipped — see PR #20. Two unrelated dependency advisories (`nanoid`,
+   `js-yaml`) were caught and fixed in the same pass.
+4. `.github/workflows/email-outbox.yml` and `production-smoke.yml` disabled.
+5. The Supabase project was **paused** (not deleted) — status `INACTIVE`.
+6. The Vercel project was **paused** — `luckydraw.livapon.com` now returns
+   `503 DEPLOYMENT_PAUSED`.
+7. The three UptimeRobot monitors and the Slack incoming-webhook alert
+   integration were removed, since nothing is left to page anyone about.
+8. Merged git worktrees/branches from prior sessions were cleaned up.
+
+**Reviving this**: unpause the Supabase project first, then Vercel (a paused
+Vercel project served by a still-paused Supabase project would just fail
+health checks on restart). Both pauses are reversible; nothing was deleted.
+Entrant personal data is still sitting in the paused Supabase project and
+still needs the deletion in
+[data-privacy.md](operations/data-privacy.md#retention) run by hand on or
+after 2026-11-13 — pausing does not do this automatically.
+
+## Before the event (historical)
+
+The application was built, deployed and operational at
+`https://luckydraw.livapon.com`. What remained before the event was content
+and configuration, not code — see [Open items](#open-items).
 
 **[readiness-gaps.md](operations/readiness-gaps.md) is the living tracker of
 what is still open, not this section.** It is dated and updated far more

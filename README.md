@@ -13,6 +13,15 @@ venue; the application holds no prize data and never says who won.
 - Production: `https://luckydraw.livapon.com`, deployed on Vercel, backed by
   Supabase project `eyysljemlsghdxjaxjbn`.
 
+**Closed as of 2026-08-20.** The event is over and the project owner closed
+the system ahead of the [data-retention date](docs/operations/data-privacy.md)
+rather than leaving it running unattended. Both Vercel and Supabase are
+paused (not deleted) — `luckydraw.livapon.com` returns `503
+DEPLOYMENT_PAUSED`, and entrant data still exists in the paused Supabase
+project until the scheduled 2026-11-13 deletion. See
+[HANDOFF.md](docs/HANDOFF.md) for the full closure record and what reviving
+this would take.
+
 ## Prerequisites
 
 - Node.js 22.x (see `.nvmrc`)
@@ -182,9 +191,12 @@ under `emails/`, rendered to HTML and a plain-text alternative by
 `lib/email/templates.ts`. The sender is `LIVAPON <info@chairman.jp>`.
 
 The receipt email was removed in `0010`. Once a number has been issued, the
-confirmation link the visitor is already holding returns to it for good — see
+confirmation link the visitor is already holding returns to it — see
 `issuedReceiptToken` — so a second message was a duplicate of a copy they had,
-at twice the volume on the day. The `RECEIPT` kind, its template and the
+at twice the volume on the day. This holds only while the entry's personal
+data still exists: [data-privacy.md](docs/operations/data-privacy.md) fixes
+that at 90 days after the event (2026-11-13), after which the link has
+nothing left to resolve to. The `RECEIPT` kind, its template and the
 worker's handling of it are all still here, because rows armed before that
 change still have to be able to settle.
 
