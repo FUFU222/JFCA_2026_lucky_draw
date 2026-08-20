@@ -1,9 +1,9 @@
-import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
 import { NumberReceipt } from '../../../../components/public/number-receipt';
 import { PageShell } from '../../../../components/public/page-shell';
 import { findCampaign, findReceipt } from '../../../../lib/db/public-queries';
+import { bearerTokenRobotsMetadata } from '../../../../lib/security/bearer-token-page';
 
 // The receipt is looked up per request and never cached at the edge: the token
 // is a bearer credential and its page is personal.
@@ -13,9 +13,7 @@ export const dynamic = 'force-dynamic';
 // is unlinked and a missing receipt is a hard 404, which is most of the reason
 // it would not be found anyway — this is the part that does not depend on how a
 // particular crawler discovers URLs.
-export const metadata: Metadata = {
-  robots: { index: false, follow: false, nocache: true },
-};
+export const metadata = bearerTokenRobotsMetadata;
 
 export default async function NumberPage({
   params,
