@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 
@@ -13,6 +14,11 @@ import { messages } from '../../../../lib/i18n/messages';
 
 // This page must never be cached: it reports whether a link is still usable.
 export const dynamic = 'force-dynamic';
+
+// Same reasoning as the number page: this URL is the verification token itself.
+export const metadata: Metadata = {
+  robots: { index: false, follow: false, nocache: true },
+};
 
 export default async function VerifyPage({
   params,
