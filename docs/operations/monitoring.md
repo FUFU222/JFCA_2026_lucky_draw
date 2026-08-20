@@ -1,5 +1,11 @@
 # Monitoring
 
+**Closed as of 2026-08-20 — see [HANDOFF.md](../HANDOFF.md).** The alert
+webhook and all three UptimeRobot monitors described below were deleted
+outright, not paused. Everything on this page describes how it was wired
+while the system was live and doubles as the reference for recreating it, not
+as a description of anything currently running.
+
 Until this document existed, the only thing that noticed a fault was a person
 looking at the dashboard. That works at a desk and not at a festival booth,
 which is the one place it has to.

@@ -1,11 +1,58 @@
 # Handoff — JFCA 2026 Lucky Draw
 
-Updated 2026-08-04 (originally written 2026-07-29). Written for whoever picks
+Updated 2026-08-20 (originally written 2026-07-29). Written for whoever picks
 this up next, agent or human.
 
-The application is built, deployed and operational at
-`https://luckydraw.livapon.com`. What remains before the event is content and
-configuration, not code — see [Open items](#open-items).
+## Closed — 2026-08-20
+
+The event (2026-08-15) is over. The project owner decided to close the
+system rather than leave it running unattended until the originally planned
+[2026-11-13 deletion date](operations/data-privacy.md). Everything below this
+notice describes the system as it was *while operating* — read it for how the
+thing is built, not as a description of its current state.
+
+What was done, in order, the same day:
+
+1. Final CSV export taken (outbox confirmed at zero first) and Resend's paid
+   plan cancelled — it was bought for this event only, ahead of its own
+   2026-08-31 deadline. Both are the routine
+   [after-the-event checklist](operations/on-site-runbook.md#after-the-event);
+   what follows is what that checklist doesn't cover.
+2. A pending security fix ([robots.ts](../app/robots.ts), noindex on the two
+   bearer-token pages, baseline response headers) was finished, reviewed, and
+   shipped — see PR #20. Two unrelated dependency advisories (`nanoid`,
+   `js-yaml`) were caught and fixed in the same pass.
+3. `.github/workflows/email-outbox.yml` and `production-smoke.yml` disabled.
+4. The Supabase project was **paused** (not deleted) — status `INACTIVE`.
+5. The Vercel project was **paused** — `luckydraw.livapon.com` now returns
+   `503 DEPLOYMENT_PAUSED`.
+6. The three UptimeRobot monitors and the Slack incoming-webhook alert
+   integration were **removed outright** (not paused) — see
+   [monitoring.md](operations/monitoring.md), since nothing is left to page
+   anyone about.
+7. Merged git worktrees/branches from prior sessions were cleaned up.
+
+**Reviving this** is more than unpausing. Unpause the Supabase project first,
+then Vercel (a paused Vercel project served by a still-paused Supabase
+project would just fail health checks on restart) — both pauses are
+reversible and nothing was deleted there. But step 3's GitHub Actions
+workflows need re-enabling by hand, and step 6's UptimeRobot monitors and
+Slack webhook were deleted, not paused — they need recreating from scratch
+per [monitoring.md](operations/monitoring.md), or the revived app runs with
+no alerting and no outbox retry worker. Entrant personal data is still
+sitting in the paused Supabase project and still needs the deletion in
+[data-privacy.md](operations/data-privacy.md#retention) run by hand on or
+after 2026-11-13 — pausing does not do this automatically.
+
+## Before the event (historical)
+
+**Everything from here to [Open items](#open-items) predates the 2026-08-20
+closure above and describes a state that no longer holds** — monitoring
+"fully wired," for instance, was true until step 6 above removed it.
+
+The application was built, deployed and operational at
+`https://luckydraw.livapon.com`. What remained before the event was content
+and configuration, not code — see [Open items](#open-items).
 
 **[readiness-gaps.md](operations/readiness-gaps.md) is the living tracker of
 what is still open, not this section.** It is dated and updated far more
