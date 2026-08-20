@@ -17,6 +17,18 @@ import { AlertThrottle, formatAlert, redactSensitive, summarizeError } from './a
 
 const throttle = new AlertThrottle();
 
+/**
+ * A visitor's browser can report a client-side fault through an endpoint
+ * that has to stay unauthenticated, unlike every other caller of
+ * `reportServerError`. Sharing `throttle`'s budget with it would let a flood
+ * of fabricated client errors spend the hourly cap and silently suppress a
+ * real server-side alert for the rest of the window — the one outcome this
+ * whole system exists to prevent. A separate, smaller budget means the worst
+ * a hostile client can do is drown out other client errors, never a server
+ * one.
+ */
+const clientThrottle = new AlertThrottle({ maxPerWindow: 10 });
+
 export interface ErrorContext {
   /** Route or job the fault came from, e.g. `POST /api/campaigns/…/entries`. */
   route?: string;
@@ -45,14 +57,17 @@ export async function reportServerError(error: unknown, context: ErrorContext = 
     console.error('[error] unserialisable failure at', route);
   }
 
-  await notify(summary);
+  await notify(summary, context.kind === 'client' ? clientThrottle : throttle);
 }
 
-async function notify(summary: ReturnType<typeof summarizeError>): Promise<void> {
+async function notify(
+  summary: ReturnType<typeof summarizeError>,
+  throttleFor: AlertThrottle,
+): Promise<void> {
   const url = process.env.ALERT_WEBHOOK_URL?.trim();
   if (!url) return;
 
-  const decision = throttle.decide(summary.fingerprint, Date.now());
+  const decision = throttleFor.decide(summary.fingerprint, Date.now());
   if (!decision.send) return;
 
   const text = formatAlert(summary, {

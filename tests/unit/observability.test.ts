@@ -105,7 +105,7 @@ describe('throttling the alert channel', () => {
     const line = formatAlert(summary, { suppressed: 3, appUrl: 'https://example.com' });
 
     expect(line).toContain('POST /api/campaigns/x/entries');
-    expect(line).toContain('3 more');
+    expect(line).toContain('あと3件');
     expect(line).toContain('https://example.com');
   });
 });

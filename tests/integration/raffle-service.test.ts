@@ -311,12 +311,26 @@ describe('RaffleService registration', () => {
     expect(consumed).toHaveLength(0);
   });
 
-  it('refuses a rate-limited submission', async () => {
+  it('refuses a rate-limited submission, blamed on the network when the IP bucket is what refused it', async () => {
     const { service, repository } = buildService({ rateLimiter: { consume: async () => false } });
 
     await expect(service.requestVerification(validRequest)).resolves.toEqual({
       accepted: false,
-      reason: 'rate_limited',
+      reason: 'rate_limited_network',
+    });
+    expect(repository.entries).toHaveLength(0);
+  });
+
+  it('blames the address, not the network, when only the per-address bucket refuses', async () => {
+    // The IP bucket allows every call; only a key starting with `raffle:email:`
+    // is refused — the one case a visitor switching networks cannot fix.
+    const { service, repository } = buildService({
+      rateLimiter: { consume: async (key?: string) => !key?.startsWith('raffle:email:') },
+    });
+
+    await expect(service.requestVerification(validRequest)).resolves.toEqual({
+      accepted: false,
+      reason: 'rate_limited_address',
     });
     expect(repository.entries).toHaveLength(0);
   });
@@ -545,7 +559,20 @@ describe('RaffleService lookup', () => {
         email: validRequest.email,
         turnstileToken: 'turnstile-token',
       }),
-    ).resolves.toEqual({ found: false, reason: 'rate_limited' });
+    ).resolves.toEqual({ found: false, reason: 'rate_limited_network' });
+  });
+
+  it('blames the address, not the network, when only the per-address lookup bucket refuses', async () => {
+    const { service } = buildService({
+      rateLimiter: { consume: async (key?: string) => !key?.startsWith('raffle:lookup-email:') },
+    });
+    await expect(
+      service.lookupNumber({
+        eventSlug: validRequest.eventSlug,
+        email: validRequest.email,
+        turnstileToken: 'turnstile-token',
+      }),
+    ).resolves.toEqual({ found: false, reason: 'rate_limited_address' });
   });
 
   it('spends a rate-limit bucket that is separate from entry submissions and resends', async () => {

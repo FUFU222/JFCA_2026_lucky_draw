@@ -33,8 +33,10 @@ export async function POST(request: Request, context: { params: Promise<{ eventS
       return invalidRequest();
     case 'turnstile':
       return NextResponse.json({ ok: false, error: 'captcha_failed' }, { status: 403 });
-    case 'rate_limited':
+    case 'rate_limited_network':
       return NextResponse.json({ ok: false, error: 'try_again_later' }, { status: 429 });
+    case 'rate_limited_address':
+      return NextResponse.json({ ok: false, error: 'try_again_later_address' }, { status: 429 });
     default:
       // No further distinction on purpose: an address that never entered and
       // one that entered but has not confirmed yet must read identically, so

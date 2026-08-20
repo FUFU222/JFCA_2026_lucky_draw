@@ -136,14 +136,32 @@ export function SaveableTicket({ number, eventTitle }: { number: bigint; eventTi
       )}
 
       {saved ? (
+        // Follows the ticket rather than arriving with it: appearing fully
+        // formed at the same instant the picture starts its own 500ms pop
+        // read as two unrelated things happening on top of each other, not
+        // one reveal. `fade-in-up` is the same "a secondary element settles
+        // in" motion used elsewhere in this app; the 300ms delay is timed to
+        // start as the ticket's bounce is settling and finish just after it,
+        // so the button reads as confirming the ticket rather than racing it.
         <a
           href={saved}
           download={ticketFileName(number)}
-          className="flex min-h-12 w-full items-center justify-center rounded-lg bg-[var(--brand-accent)] px-5 text-base font-semibold text-white"
+          style={{ animationDelay: '300ms' }}
+          className="fade-in-up flex min-h-12 w-full items-center justify-center rounded-lg bg-[var(--brand-accent)] px-5 text-base font-semibold text-white"
         >
           {t.save}
         </a>
       ) : null}
+
+      {/*
+        Styled as a caption of the button above, not a standalone sentence —
+        it reads as confirming *how* to keep the number, not as one more fact
+        competing with it for attention. Rendered unconditionally rather than
+        only alongside the button: on the no-canvas fallback path there is no
+        button at all, and this line is the only place a screenshot is ever
+        suggested.
+      */}
+      <p className="text-sm text-neutral-500">{t.saveHint}</p>
     </div>
   );
 }

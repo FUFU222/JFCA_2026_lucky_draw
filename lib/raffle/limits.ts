@@ -13,6 +13,16 @@
  */
 export const RATE_LIMIT_WINDOW_SECONDS = 24 * 60 * 60;
 
+/**
+ * The per-token send gate, enforced atomically in `claim_verification_send`
+ * (supabase/migrations/0002_raffle_entry_flow.sql). Exported from here rather
+ * than from `./service` (which pulls in `node:crypto`) so the client-side
+ * resend button can mirror the cooldown without a server round-trip — see
+ * `components/public/raffle-form.tsx`. Change both together.
+ */
+export const RESEND_COOLDOWN_SECONDS = 2 * 60;
+export const MAX_VERIFICATION_SENDS = 3;
+
 const DEFAULT_EMAIL_REQUEST_LIMIT = 5;
 const DEFAULT_IP_REQUEST_LIMIT = 500;
 

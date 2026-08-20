@@ -8,6 +8,25 @@ import { Spinner } from '../ui/spinner';
 import { PRIVACY_POLICY_URL } from '../../lib/campaign/legal';
 import { DEFAULT_COUNTRY, type CountryOption } from '../../lib/i18n/countries';
 import { messages } from '../../lib/i18n/messages';
+import { RESEND_COOLDOWN_SECONDS } from '../../lib/raffle/limits';
+
+/**
+ * The server enforces this for real (`claim_verification_send` in
+ * supabase/migrations/0002_raffle_entry_flow.sql) — a request inside the
+ * window is refused there regardless of what this component does. Disabling
+ * the button client-side only stops a visitor from spending one of their
+ * five daily attempts on a click that the server was always going to no-op,
+ * while showing the same "Check your email" acknowledgement either way. See
+ * the note on `RESEND_COOLDOWN_SECONDS` in lib/raffle/limits.ts for why the
+ * server-side counter cannot simply skip charging that click instead: doing
+ * so would let a resend loop distinguish a real pending entry from an
+ * unregistered address by whether it ever gets rate-limited.
+ */
+function formatCooldown(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
 
 type Draft = {
   firstName: string;
@@ -64,6 +83,43 @@ function readDraft(eventSlug: string): Draft {
   }
 }
 
+type Cooldown = { email: string; availableAt: number };
+
+/**
+ * Session storage, not component state, because the cooldown this guards
+ * against is the server's — a reload mid-window must not forget it. Without
+ * this, a visitor whose page refreshed (a dropped venue-wifi connection, an
+ * accidental pull-to-refresh) could retype the same address into the primary
+ * form and hit `submitEntry`, which spends the same daily allowance the
+ * resend button already protects, on a send the server will silently no-op
+ * for the same reason.
+ */
+function cooldownKey(eventSlug: string) {
+  return `livapon:lucky-draw:${eventSlug}:cooldown`;
+}
+
+function readCooldown(eventSlug: string): Cooldown | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const stored = window.sessionStorage.getItem(cooldownKey(eventSlug));
+    if (!stored) return null;
+    const parsed = JSON.parse(stored) as Partial<Cooldown>;
+    if (typeof parsed.email !== 'string' || typeof parsed.availableAt !== 'number') return null;
+    return parsed.availableAt > Date.now() ? { email: parsed.email, availableAt: parsed.availableAt } : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCooldown(eventSlug: string, cooldown: Cooldown) {
+  try {
+    window.sessionStorage.setItem(cooldownKey(eventSlug), JSON.stringify(cooldown));
+  } catch {
+    // A browser with storage disabled loses the reload guard, not the
+    // server-side limit itself — the visitor can still enter.
+  }
+}
+
 export interface RaffleFormProps {
   eventSlug: string;
   turnstileSiteKey: string;
@@ -106,6 +162,44 @@ export function RaffleForm({
   const [error, setError] = useState<string | null>(null);
   const [resendNote, setResendNote] = useState<string | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
+  // Epoch ms, plus the address it belongs to. Set the moment a send
+  // succeeds — the original submission is a send too, so the very first
+  // "Send it again" press is already inside the server's cooldown window.
+  // Mirrored to session storage (see `writeCooldown`) so a reload does not
+  // forget it — the primary form's email field reaches the exact same server
+  // no-op the resend button guards against, once its address matches.
+  const [resendAvailableAt, setResendAvailableAt] = useState<number | null>(null);
+  const [cooldownEmail, setCooldownEmail] = useState<string | null>(null);
+  const [nowTick, setNowTick] = useState<number>(() => Date.now());
+
+  function armCooldown(email: string) {
+    const availableAt = Date.now() + RESEND_COOLDOWN_SECONDS * 1000;
+    setResendAvailableAt(availableAt);
+    setCooldownEmail(email);
+    writeCooldown(eventSlug, { email, availableAt });
+  }
+
+  // Only ticks while a cooldown is actually showing, and stops itself the
+  // moment it expires rather than waiting for some other state change to
+  // tear the effect down — otherwise this would re-render the whole form
+  // once a second for as long as the acknowledgement screen stayed open.
+  useEffect(() => {
+    if (resendAvailableAt === null) return;
+    const id = setInterval(() => {
+      const now = Date.now();
+      setNowTick(now);
+      if (now >= resendAvailableAt) clearInterval(id);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [resendAvailableAt]);
+
+  const resendWaitSeconds =
+    resendAvailableAt === null ? 0 : Math.max(0, Math.ceil((resendAvailableAt - nowTick) / 1000));
+  // Scoped to the address the cooldown was armed for: changing the email on
+  // the form (or a resend, which never changes it) both key off this rather
+  // than off `resendAvailableAt` alone.
+  const onCooldown =
+    resendWaitSeconds > 0 && cooldownEmail !== null && cooldownEmail === draft.email.trim();
 
   // The draft is read after mounting, never during the first render: the server
   // cannot see session storage, and rendering a different value here would make
@@ -123,6 +217,12 @@ export function RaffleForm({
     // A visitor who already filled these in and then reloaded must not find
     // their own answers hidden behind a collapsed section.
     if (PROFILE_FIELDS.some((field) => stored[field] !== EMPTY_DRAFT[field])) setProfileOpen(true);
+
+    const cooldown = readCooldown(eventSlug);
+    if (cooldown) {
+      setResendAvailableAt(cooldown.availableAt);
+      setCooldownEmail(cooldown.email);
+    }
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [eventSlug]);
 
@@ -140,8 +240,14 @@ export function RaffleForm({
 
   const emailLooksUsable = /.+@.+\..+/.test(draft.email.trim());
   // Test mode never renders the widget below, so there is no token to wait on.
+  // `!onCooldown` matters here as much as it does on the resend button below:
+  // this same address hitting submit again is the same server no-op.
   const canSend =
-    (isTestMode || Boolean(captchaToken)) && emailLooksUsable && draft.consent && status !== 'sending';
+    (isTestMode || Boolean(captchaToken)) &&
+    emailLooksUsable &&
+    draft.consent &&
+    status !== 'sending' &&
+    !onCooldown;
 
   async function post(path: string, body: Record<string, unknown>) {
     setError(null);
@@ -194,6 +300,7 @@ export function RaffleForm({
     if (!accepted) return;
     setStatus('submitted');
     setScreen('submitted');
+    armCooldown(draft.email.trim());
     try {
       window.sessionStorage.removeItem(draftKey(eventSlug));
     } catch {
@@ -211,7 +318,10 @@ export function RaffleForm({
       is_test: isTestMode,
     });
     setStatus('submitted');
-    if (accepted) setResendNote(submitted.resendDone);
+    if (accepted) {
+      setResendNote(submitted.resendDone);
+      armCooldown(draft.email.trim());
+    }
   }
 
   if (screen === 'submitted') {
@@ -225,6 +335,45 @@ export function RaffleForm({
           {submitted.spam}
         </p>
         {resendNote && <p className="text-sm text-neutral-700">{resendNote}</p>}
+        {/*
+          Always shown, not only after a resend that looked like it worked.
+          A link past 24 hours cannot be revived, and "Send it again" is
+          silently a no-op for it — the same non-disclosing "another link is
+          on its way" acceptance as everything else here. This is the only
+          place that tells a visitor stuck on this screen that resending will
+          not help them, and that entering again will.
+        */}
+        <p className="text-sm text-neutral-600">
+          {submitted.expiredHint}{' '}
+          <button
+            type="button"
+            // Disabled while a resend is in flight for the same reason the
+            // resend button itself is: abandoning that request mid-flight
+            // rather than waiting for it left `status` stuck at `'submitted'`
+            // out of sync with `screen === 'form'`, which silently disables
+            // the draft-autosave effect (guarded on `status === 'submitted'`)
+            // for the rest of the session.
+            disabled={status === 'sending'}
+            className="font-semibold text-neutral-900 underline underline-offset-2 disabled:opacity-40"
+            onClick={() => {
+              // The address itself stays filled in — only the screen and the
+              // stale state around the old attempt reset. Re-submitting is
+              // what actually issues a fresh token; `resendVerification`
+              // never does, expired or not.
+              setStatus('editing');
+              setError(null);
+              setResendNote(null);
+              // A token solved for the resend dialog and then cancelled is
+              // still sitting in state otherwise, and could satisfy `canSend`
+              // on the freshly-shown form before its own widget answers.
+              setCaptchaToken(null);
+              setCaptchaFailed(false);
+              setScreen('form');
+            }}
+          >
+            {submitted.expiredAction}
+          </button>
+        </p>
         {error && (
           <p role="alert" className="text-sm font-medium text-[#c8102e]">
             {error}
@@ -248,7 +397,12 @@ export function RaffleForm({
           // original target — and a second press bumps the round under a
           // mounted widget, which runs a second challenge against the shared
           // budget and can leave the earlier, now-invalid token in state.
-          disabled={status === 'sending' || dialog === 'resend'}
+          //
+          // Also disabled on cooldown: the server would silently no-op this
+          // exact click anyway (see the note above `formatCooldown`), and
+          // disabling it here is what stops that from also costing one of
+          // the visitor's five daily attempts for nothing.
+          disabled={status === 'sending' || dialog === 'resend' || onCooldown}
           onClick={() => {
             // A fresh challenge every time the dialog opens. A token left over
             // from a cancelled attempt is spendable for a few minutes and then
@@ -263,7 +417,11 @@ export function RaffleForm({
         >
           <span className="inline-flex items-center justify-center gap-2">
             {status === 'sending' && <Spinner />}
-            {status === 'sending' ? t.submitting : submitted.resend}
+            {status === 'sending'
+              ? t.submitting
+              : onCooldown
+                ? `${submitted.resendWait} ${formatCooldown(resendWaitSeconds)}`
+                : submitted.resend}
           </span>
         </button>
 
@@ -344,9 +502,14 @@ export function RaffleForm({
           way the section keeps the heading a screen reader can navigate to,
           exactly as it had before it became collapsible.
         */}
-        <summary className="-mx-4 -my-3 cursor-pointer list-none px-4 py-3 text-neutral-900 [&::-webkit-details-marker]:hidden">
-          <h2 className="flex items-center gap-2 text-[15px] font-bold">
-            <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-[var(--brand-accent)]" />
+        <summary className="-mx-4 -my-3 cursor-pointer list-none px-4 py-3 text-neutral-700 [&::-webkit-details-marker]:hidden">
+          {/*
+            No accent dot here, unlike the heading below: that marker is the
+            page's one "this is the actual action" signal, and putting it on
+            both headings made the optional, collapsed section compete with it
+            for attention instead of visibly taking a back seat.
+          */}
+          <h2 className="flex items-center gap-2 text-[15px] font-semibold">
             {/* One text flow, so "(Optional)" wraps with the heading instead of
                 being pushed against the chevron on a narrow screen. */}
             <span className="min-w-0 flex-1">
@@ -460,7 +623,7 @@ export function RaffleForm({
 
       <section className="space-y-4">
         <div>
-          <h2 className="flex items-center gap-2 text-xl font-bold text-neutral-900">
+          <h2 className="flex items-center gap-2 text-2xl font-bold text-neutral-900">
             <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-[var(--brand-accent)]" />
             {t.numberHeading}
           </h2>
@@ -510,10 +673,7 @@ export function RaffleForm({
             checked={draft.marketing}
             onChange={(event) => set('marketing', event.target.checked)}
           />
-          <span>
-            {t.marketing}
-            <span className="mt-0.5 block text-sm text-neutral-500">{t.marketingOptional}</span>
-          </span>
+          <span>{t.marketing}</span>
         </label>
 
         {!isTestMode && (
@@ -549,7 +709,11 @@ export function RaffleForm({
         >
           <span className="inline-flex items-center justify-center gap-2">
             {status === 'sending' && <Spinner />}
-            {status === 'sending' ? t.submitting : t.submit}
+            {status === 'sending'
+              ? t.submitting
+              : onCooldown
+                ? `${submitted.resendWait} ${formatCooldown(resendWaitSeconds)}`
+                : t.submit}
           </span>
         </button>
       </section>
@@ -648,6 +812,8 @@ function errorFor(code: string | undefined, status: number, t: typeof messages.f
       return t.captchaFailed;
     case 'try_again_later':
       return t.errorRateLimited;
+    case 'try_again_later_address':
+      return t.errorRateLimitedAddress;
     case 'registration_unavailable':
       return t.errorClosed;
     case 'invalid_request':

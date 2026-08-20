@@ -72,8 +72,16 @@ body {
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    /* Zeroing duration alone is not enough for an animation with a delay and
+       a `both` fill-mode starting at `opacity: 0` (the save button on the
+       ticket, `animation-delay: 300ms` in saveable-ticket.tsx): the delay
+       phase still runs at full length, backward-filled invisible, before the
+       now-instant animation reveals it — the exact motion this rule exists
+       to remove, just moved into an unexplained wait instead. */
+    animation-delay: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    transition-delay: 0.01ms !important;
     scroll-behavior: auto !important;
   }
 }

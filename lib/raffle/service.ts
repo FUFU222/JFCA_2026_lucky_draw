@@ -4,12 +4,16 @@ import { isRegistrationOpen } from '../campaign/config';
 import type { Campaign, RaffleEntry } from '../db/types';
 import { deriveReceiptToken, deriveVerificationToken, hashToken } from './tokens';
 import {
+  MAX_VERIFICATION_SENDS,
   RATE_LIMIT_WINDOW_SECONDS,
+  RESEND_COOLDOWN_SECONDS,
   emailRequestLimit,
   ipRequestLimit,
   lookupEmailRequestLimit,
   lookupIpRequestLimit,
 } from './limits';
+
+export { MAX_VERIFICATION_SENDS, RESEND_COOLDOWN_SECONDS } from './limits';
 import {
   confirmRequestSchema,
   lookupRequestSchema,
@@ -18,8 +22,6 @@ import {
 } from './validation';
 
 const TOKEN_LIFETIME_MS = 24 * 60 * 60 * 1000;
-export const RESEND_COOLDOWN_SECONDS = 2 * 60;
-export const MAX_VERIFICATION_SENDS = 3;
 
 /**
  * Raised when the database reports that a verification link cannot be used:
@@ -146,7 +148,17 @@ export type RaffleRequestResult =
   // address a real entrant already used.
   | {
       accepted: false;
-      reason: 'invalid' | 'closed' | 'rate_limited' | 'turnstile' | 'test_address_conflict';
+      reason:
+        | 'invalid'
+        | 'closed'
+        // Split so the caller can tell a visitor the true cause: a shared
+        // venue network is nothing this address can do anything about, but
+        // this address having asked several times today is — and "switch to
+        // mobile data" is actively wrong advice for the second one.
+        | 'rate_limited_network'
+        | 'rate_limited_address'
+        | 'turnstile'
+        | 'test_address_conflict';
     };
 
 /**
@@ -160,7 +172,10 @@ export type RaffleRequestResult =
  */
 export type RaffleLookupResult =
   | { found: true; number: bigint }
-  | { found: false; reason?: 'invalid' | 'rate_limited' | 'turnstile' };
+  | {
+      found: false;
+      reason?: 'invalid' | 'rate_limited_network' | 'rate_limited_address' | 'turnstile';
+    };
 
 export interface RaffleServiceDependencies {
   repository: RaffleRepository;
@@ -231,8 +246,15 @@ export class RaffleService {
       return { accepted: false, reason: 'closed' };
     }
 
-    if (!isTest && !(await this.consumeRequestAllowance(request.eventSlug, request.email, request.ipAddress))) {
-      return { accepted: false, reason: 'rate_limited' };
+    if (!isTest) {
+      const limited = await this.consumeRequestAllowance(
+        request.eventSlug,
+        request.email,
+        request.ipAddress,
+      );
+      if (limited) {
+        return { accepted: false, reason: limited === 'ip' ? 'rate_limited_network' : 'rate_limited_address' };
+      }
     }
 
     const existing = await this.dependencies.repository.findEntryByEmail(
@@ -347,8 +369,15 @@ export class RaffleService {
       return { accepted: false, reason: 'closed' };
     }
 
-    if (!isTest && !(await this.consumeRequestAllowance(request.eventSlug, request.email, request.ipAddress))) {
-      return { accepted: false, reason: 'rate_limited' };
+    if (!isTest) {
+      const limited = await this.consumeRequestAllowance(
+        request.eventSlug,
+        request.email,
+        request.ipAddress,
+      );
+      if (limited) {
+        return { accepted: false, reason: limited === 'ip' ? 'rate_limited_network' : 'rate_limited_address' };
+      }
     }
 
     // Every outcome below returns the same acceptance, so a resend never
@@ -395,8 +424,15 @@ export class RaffleService {
     // extra database round trip to make.
     if (!campaign) return { found: false };
 
-    if (!isTest && !(await this.consumeLookupAllowance(request.eventSlug, request.email, request.ipAddress))) {
-      return { found: false, reason: 'rate_limited' };
+    if (!isTest) {
+      const limited = await this.consumeLookupAllowance(
+        request.eventSlug,
+        request.email,
+        request.ipAddress,
+      );
+      if (limited) {
+        return { found: false, reason: limited === 'ip' ? 'rate_limited_network' : 'rate_limited_address' };
+      }
     }
 
     // The one thing this must not disclose beyond the accepted risk: whether
@@ -445,14 +481,21 @@ export class RaffleService {
     return (await this.dependencies.verifyOperatorSession?.()) ?? false;
   }
 
+  /**
+   * Returns which bucket refused the request — `'ip'` or `'email'` — or `null`
+   * if both allowed it, so the caller can tell a visitor the true cause
+   * rather than a single generic "too many attempts".
+   *
+   * The IP bucket is checked first and the checks are sequential: a caller
+   * already blocked at the network level must not also spend the address
+   * bucket, so a shared, easily-exhausted venue IP cannot burn through every
+   * address behind it.
+   */
   private async consumeRequestAllowance(
     eventSlug: string,
     email: string,
     ipAddress: string | undefined,
-  ): Promise<boolean> {
-    // The address limit is consumed first and the checks are sequential: an
-    // address that is already over its limit must not be able to keep creating
-    // per-address buckets, and a blocked caller must not burn a shared bucket.
+  ): Promise<'ip' | 'email' | null> {
     const limits = this.dependencies.limits ?? {
       email: emailRequestLimit(),
       ip: ipRequestLimit(),
@@ -463,26 +506,27 @@ export class RaffleService {
       limits.ip,
       RATE_LIMIT_WINDOW_SECONDS,
     );
-    if (!ipAllowed) return false;
+    if (!ipAllowed) return 'ip';
 
-    return this.dependencies.rateLimiter.consume(
+    const emailAllowed = await this.dependencies.rateLimiter.consume(
       `raffle:email:${hashToken(`${eventSlug}:${email}`)}`,
       limits.email,
       RATE_LIMIT_WINDOW_SECONDS,
     );
+    return emailAllowed ? null : 'email';
   }
 
   /**
    * A separate bucket pair from {@link consumeRequestAllowance}, on the same
    * IP and address axes but never sharing a key with it: a burst of lookups
    * must not spend the allowance a real entrant needs to submit or resend,
-   * and the reverse.
+   * and the reverse. Returns the same `'ip' | 'email' | null` shape.
    */
   private async consumeLookupAllowance(
     eventSlug: string,
     email: string,
     ipAddress: string | undefined,
-  ): Promise<boolean> {
+  ): Promise<'ip' | 'email' | null> {
     const limits = this.dependencies.lookupLimits ?? {
       email: lookupEmailRequestLimit(),
       ip: lookupIpRequestLimit(),
@@ -493,13 +537,14 @@ export class RaffleService {
       limits.ip,
       RATE_LIMIT_WINDOW_SECONDS,
     );
-    if (!ipAllowed) return false;
+    if (!ipAllowed) return 'ip';
 
-    return this.dependencies.rateLimiter.consume(
+    const emailAllowed = await this.dependencies.rateLimiter.consume(
       `raffle:lookup-email:${hashToken(`${eventSlug}:${email}`)}`,
       limits.email,
       RATE_LIMIT_WINDOW_SECONDS,
     );
+    return emailAllowed ? null : 'email';
   }
 
   private hasExpired(token: VerificationToken): boolean {

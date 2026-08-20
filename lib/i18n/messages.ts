@@ -33,7 +33,6 @@ export const messages = {
     // commercial email has to be its own affirmative act. Unticked is the
     // default a visitor gets by doing nothing.
     marketing: 'Also send me LIVAPON news and offers by email. You can unsubscribe at any time.',
-    marketingOptional: 'Optional — you get your number either way',
     submit: 'Send confirmation email',
     submitting: 'Sending…',
 
@@ -50,6 +49,11 @@ export const messages = {
     errorGeneric: 'Something went wrong. Please try again.',
     errorRateLimited:
       'Too many attempts from this network. Ask a member of staff for help, or try again from mobile data.',
+    // Distinct from the network message above on purpose: switching networks
+    // does nothing for this one, since the limit follows the address, not the
+    // connection.
+    errorRateLimitedAddress:
+      'This address has already requested several confirmation emails today. Wait a while and try again, or ask a member of staff for help.',
     errorClosed: 'Entries are not open at the moment.',
     // Test mode only, so this one is read by an operator rather than a visitor.
     errorTestAddressInUse:
@@ -79,6 +83,15 @@ export const messages = {
     resendDialogConfirm: 'Send again',
     resendDialogCancel: 'Go back',
     resendDone: 'If this address can enter, another link is on its way.',
+    // Followed by a live M:SS countdown; see formatCooldown in raffle-form.tsx.
+    resendWait: 'You can request another in',
+    // A link older than 24 hours cannot be revived, and "Send it again"
+    // silently does nothing for it — the same non-disclosing acceptance as
+    // every other outcome here. This is the only way a visitor finds out
+    // resending will not help them, so it is always shown, not only after a
+    // resend that appeared to work but did not.
+    expiredHint: 'Still nothing after a day? The link may have expired.',
+    expiredAction: 'Enter your email again',
   },
 
   // This page has no confirmation dialog, so the one line under the heading is
@@ -139,6 +152,10 @@ export const messages = {
     // yet", on purpose — see `RaffleService.lookupNumber`.
     notFound: 'No ready number for that address yet. Check your confirmation email, or ask a staff member for help.',
     errorRateLimited: 'Too many attempts from this network. Ask a member of staff for help, or try again from mobile data.',
+    // See the same key under `form` — the address-level limit needs its own
+    // wording because switching networks will not help this one.
+    errorRateLimitedAddress:
+      'This address has already been checked several times today. Try again later, or ask a member of staff for help.',
     errorGeneric: 'Something went wrong. Please try again.',
   },
 

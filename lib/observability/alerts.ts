@@ -138,14 +138,23 @@ export class AlertThrottle {
 /**
  * The line a human reads in a chat channel. Deliberately short: the detail is
  * in the log, and an alert that needs scrolling is an alert that gets ignored.
+ *
+ * The frame around the message is Japanese, because the person reading this
+ * in Slack is; `summary.message` itself is left exactly as thrown. It is
+ * almost always an English string from a third-party client (Supabase,
+ * Resend, Node's own fetch), and there is no reliable way to translate
+ * arbitrary library error text — a dictionary of every possible message
+ * would be both incomplete and a maintenance burden. What Japanese buys here
+ * is enough to know *that* something broke and *where* without opening
+ * Vercel; the message itself is what you read once you do.
  */
 export function formatAlert(
   summary: ErrorSummary,
   options: { suppressed?: number; appUrl?: string } = {},
 ): string {
-  const parts = [`Lucky Draw error — ${summary.name} at ${summary.route}`, summary.message];
+  const parts = [`【Lucky Draw】エラー発生 — ${summary.route} (${summary.name})`, summary.message];
   if (options.suppressed && options.suppressed > 0) {
-    parts.push(`(${options.suppressed} more like it were suppressed)`);
+    parts.push(`(同様のエラーがあと${options.suppressed}件抑制されました)`);
   }
   if (options.appUrl) parts.push(options.appUrl);
   return parts.join('\n');
