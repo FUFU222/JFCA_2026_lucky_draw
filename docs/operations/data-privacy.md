@@ -19,9 +19,8 @@ data indefinitely for a one-day event. What is deleted:
 - Its children: `verification_tokens`, `email_outbox`, `email_deliveries` —
   cascade-deleted automatically (see below).
 
-**Update (project owner, 2026-08-20): the application was closed ahead of
-that date.** Vercel and Supabase were both paused on 2026-08-20 — see
-[HANDOFF.md](../HANDOFF.md) — so the system no longer serves anyone. **This
+**Update (project owner, 2026-08-20): Vercel and Supabase were both paused
+same-day** — see [HANDOFF.md](../HANDOFF.md) for the full record. **This
 does not change the deletion date above.** A paused Supabase project keeps
 its data as-is; it does not run the deletion in the SQL below on its own.
 The 90-day deletion still has to be carried out by hand on or after
